@@ -285,6 +285,14 @@ echo
 echo "==> investigator attack selection"
 (cd "$REPO/webapp" && npx --no-install tsx "$HERE/attacks/compare.mjs" "$FUZZ_N")
 
+# ---- monster selection ----------------------------------------------------
+# AttemptMonsterMatch and RuntimeMonsterSelection, sliced out of Quest.cs.
+# Which monster a spawn places decides what a scenario throws at the players,
+# and the rules are subtle enough to compile rather than to read.
+echo
+echo "==> monster selection for spawns"
+(cd "$REPO/webapp" && npx --no-install tsx "$HERE/spawn/compare.mjs" "$FUZZ_N")
+
 # ---- multimedia ---------------------------------------------------------
 # Self-contained: compare.mjs extracts the method from Quest.cs, builds, and
 # runs both sides itself.

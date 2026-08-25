@@ -180,6 +180,13 @@ export type {
   HeroInstance,
 } from './quest/QuestRuntime.js'
 
+export { attemptMonsterMatch, runtimeMonsterSelection } from './quest/monsterSelection.js'
+export type {
+  SelectionContext,
+  SpawnView,
+  TraitedMonster,
+  CustomMonsterView,
+} from './quest/monsterSelection.js'
 export { QuestSession } from './quest/QuestSession.js'
 export type { SessionButton, SessionOptions, SessionView } from './quest/QuestSession.js'
 export {

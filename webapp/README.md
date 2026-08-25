@@ -91,7 +91,7 @@ exceptions.
 ./tools/differential/run.sh 8000   # needs the dotnet SDK
 ```
 
-Twenty harnesses run, most over three corpora — hand-written edge cases,
+Twenty-one harnesses run, most over three corpora — hand-written edge cases,
 generated fuzz, and real shipped content:
 
 - **`tools/differential/cs`** covers `IniRead.cs`, checked against all 236
@@ -119,6 +119,10 @@ generated fuzz, and real shipped content:
   out of `Quest.cs` and compiled with the extracted `OutputSymbolReplace` and
   the real `StringKey` — the three pieces that turn an activation's keys into
   what the player reads, checked working together.
+- **`tools/differential/spawn`** covers `AttemptMonsterMatch` and
+  `RuntimeMonsterSelection`, sliced out of `Quest.cs` — which monster a spawn
+  places, by name or by traits, with the Descent-only pass that avoids
+  repeating a type.
 - **`tools/differential/attacks`** covers `GetAttackTypes` and
   `GetRandomAttack`, sliced out of `ContentTypes.cs` and `QuestMonster.cs` —
   which attack buttons a monster offers and which text pressing one draws.

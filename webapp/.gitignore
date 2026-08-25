@@ -71,10 +71,10 @@ tools/differential/*/obj/
 # named back in. This fails safe: a newly copied source needs no new rule, and
 # forgetting one cannot quietly duplicate upstream's code into this tree.
 tools/differential/**/*.cs
-!tools/differential/**/Shims.cs
+!tools/differential/**/*Shim.cs
+!tools/differential/**/*Shims.cs
 !tools/differential/**/Program.cs
 !tools/differential/**/Probe.cs
-!tools/differential/**/ValkyrieDebugShim.cs
 !tools/differential/**/SetVersionProbe.cs
 
 # ---- FFG import probe -------------------------------------------------------
