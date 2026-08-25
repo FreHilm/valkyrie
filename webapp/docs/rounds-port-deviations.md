@@ -236,6 +236,33 @@ _is_ overridden and reads the quest's own text. A `CustomMonster` that defines
 Fire button, so its own attack text is unreachable. Preserved, because changing
 it would change which buttons published scenarios show.
 
+## The end-of-quest screen sends nothing
+
+`EndGameScreen.cs` asks whether the party won, for a rating out of ten, and for
+comments — then posts all of it, plus the scenario and quest name, the language,
+the investigator list, **the complete event trace** and **every non-zero quest
+variable**, to a Google Form owned by the upstream maintainer
+(`StatsManager.cs:211`).
+
+The port shows the screen and sends nothing. `onSubmit` is optional and the
+application leaves it unset, so the feedback form is not even built — a fork
+must not quietly feed someone else's spreadsheet, and collecting free-text
+comments from players is a decision to make on purpose rather than inherit.
+
+Wiring it to an endpoint of your own is one callback. Note that a browser
+cannot read the response from Google Forms cross-origin, so a naive port would
+fail silently either way.
+
+## Options: two settings dropped
+
+Resolution and fullscreen are not in the port. Resolution belongs to the browser
+window, and the C# enumerates Unity display modes that need a restart to apply.
+Fullscreen is left to the browser's own control, where users already look for it.
+
+Language, fallback language and the two volumes are all present, written through
+as they change — matching the C#, which saves on every slider move rather than
+on a confirm.
+
 ## Deviations from the C# behaviour
 
 ### 1. A monster with no activation data no longer closes the application

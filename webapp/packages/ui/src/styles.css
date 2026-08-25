@@ -500,3 +500,81 @@ body {
 .vk-inventory__empty {
   color: var(--vk-muted);
 }
+
+/* ---- end of quest ---- */
+.vk-endgame {
+  max-width: calc(var(--u) * 28);
+  gap: calc(var(--u) * 0.4);
+}
+.vk-endgame__quest {
+  color: var(--vk-muted);
+}
+.vk-endgame__summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: calc(var(--u) * 0.15) calc(var(--u) * 0.5);
+  margin: 0;
+}
+.vk-endgame__summary dt {
+  color: var(--vk-muted);
+  font-size: var(--vk-text-small);
+}
+.vk-endgame__summary dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.vk-endgame__form {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.3);
+}
+.vk-endgame__victory,
+.vk-endgame__rating,
+.vk-endgame__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 0.2);
+}
+.vk-endgame__rating-button {
+  min-width: calc(var(--u) * 1.4);
+}
+.vk-endgame__comments {
+  width: 100%;
+  font: inherit;
+  font-size: var(--vk-text-small);
+  padding: calc(var(--u) * 0.2);
+  border-radius: var(--vk-radius);
+  border: 1px solid var(--vk-border);
+  background: var(--vk-surface);
+  color: var(--vk-text);
+}
+.vk-endgame__error {
+  color: var(--vk-danger, #c0392b);
+}
+
+/* ---- options ---- */
+.vk-options {
+  max-width: calc(var(--u) * 24);
+  gap: calc(var(--u) * 0.4);
+}
+.vk-options__row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.4);
+}
+.vk-options__row label {
+  flex: 1;
+  font-size: var(--vk-text-small);
+}
+.vk-options__select,
+.vk-options__slider {
+  flex: 1;
+  font: inherit;
+  font-size: var(--vk-text-small);
+}
+.vk-options__readout {
+  min-width: calc(var(--u) * 1.6);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--vk-muted);
+}

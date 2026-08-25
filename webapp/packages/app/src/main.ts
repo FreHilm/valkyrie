@@ -14,7 +14,9 @@
 import {
   activationDialog,
   board,
+  endGame,
   inventory,
+  options,
   monsterDialog,
   questLog,
   button,
@@ -112,6 +114,8 @@ function menu(): void {
             { label: rawText('Attack a monster'), onPress: monsterDemo },
             { label: rawText('Quest log'), onPress: logDemo },
             { label: rawText('Items'), onPress: inventoryDemo },
+            { label: rawText('End of quest'), onPress: endGameDemo },
+            { label: rawText('Options'), onPress: optionsDemo },
             { label: rawText('Choose investigators'), onPress: heroesDemo },
             {
               label: rawText('Storage'),
@@ -398,6 +402,67 @@ function inventoryDemo(): void {
   ])
 
   show(panel({ class: 'vk-shell', children: [backTo(menu), view.element, status] }))
+}
+
+/**
+ * The end-of-quest screen.
+ *
+ * No `onSubmit` is supplied, which is deliberate: the C# posts every answer to
+ * a Google Form owned by the upstream maintainer, and this fork sends nothing.
+ * Without a handler the feedback form is not even built.
+ */
+function endGameDemo(): void {
+  const screen = endGame({ onMenu: menu })
+  screen.show({
+    questName: 'The Fall of House Lynch',
+    party: ['Ashcan Pete', 'Agnes Baker'],
+    events: ['EventIntro', 'EventHallway', 'EventCellar'],
+    minutes: 95,
+    rounds: 12,
+  })
+  show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
+}
+
+/** Options, writing through to a real ConfigFile as the C# does. */
+function optionsDemo(): void {
+  const status = el('p', { class: 'vk-shell__status', attrs: { 'aria-live': 'polite' } })
+  const settings = {
+    language: 'English',
+    fallback: null as string | null,
+    music: 0.6,
+    effects: 1,
+  }
+
+  const screen = options({
+    onLanguage: (id) => {
+      settings.language = id
+      status.textContent = `Language set to ${id}.`
+    },
+    onFallback: (id) => {
+      settings.fallback = id
+      status.textContent = `Fallback set to ${id ?? 'none'}.`
+    },
+    onMusic: (volume) => {
+      settings.music = volume
+      status.textContent = `Music at ${Math.round(volume * 100)}%.`
+    },
+    onEffects: (volume) => {
+      settings.effects = volume
+      status.textContent = `Effects at ${Math.round(volume * 100)}%.`
+    },
+    onClose: menu,
+  })
+  screen.show({
+    languages: [
+      { id: 'English', name: 'English' },
+      { id: 'French', name: 'Français' },
+      { id: 'German', name: 'Deutsch' },
+      { id: 'Spanish', name: 'Español' },
+    ],
+    ...settings,
+  })
+
+  show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element, status] }))
 }
 
 /**

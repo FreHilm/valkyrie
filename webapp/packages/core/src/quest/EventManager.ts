@@ -88,6 +88,20 @@ export class EventManager {
    * the event stack drains, matching the C#.
    */
   monsterImage: MonsterInstance | null = null
+
+  /**
+   * `Quest.eventList`: the events the player has answered, in order.
+   *
+   * Recorded when a button is pressed rather than when the event fires, which
+   * is where `DialogWindow.cs:313` puts it — so an event queued but never
+   * reached is absent, and one answered twice appears twice.
+   */
+  private readonly answered: string[] = []
+
+  /** The events answered so far, oldest first. Written into a save. */
+  get history(): readonly string[] {
+    return this.answered
+  }
   /** Set when `$end` is non-zero at the end of an event. */
   questHasEnded = false
 
@@ -180,6 +194,8 @@ export class EventManager {
   endEvent(state = 0): void {
     const event = this.current
     if (event === null) return
+
+    this.answered.push(event.sectionName)
 
     const names = event.buttons[state]?.eventNames ?? []
     const enabled: string[] = []

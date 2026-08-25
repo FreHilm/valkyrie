@@ -57,6 +57,22 @@ export type {
   MonsterHealthView,
 } from './screens/activationDialog.js'
 export type { ActivationView as ActivationDialogView } from './screens/activationDialog.js'
+export { options } from './screens/options.js'
+export type {
+  Options,
+  OptionsHandlers,
+  OptionsStrings,
+  OptionsView,
+  LanguageChoice,
+} from './screens/options.js'
+export { endGame } from './screens/endGame.js'
+export type {
+  EndGame,
+  EndGameFeedback,
+  EndGameOptions,
+  EndGameStrings,
+  QuestSummary,
+} from './screens/endGame.js'
 export { questLog } from './screens/questLog.js'
 export type {
   QuestLog,
