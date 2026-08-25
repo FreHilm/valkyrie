@@ -580,22 +580,28 @@ body {
 }
 
 /* ---- playing a quest ---- */
+/*
+ * The quest is played on the whole screen, as it is in the game: the board
+ * fills it and everything else — dialogs, phase buttons, the scenario's own
+ * interface — sits on top. A strip with the rest stacked underneath left a
+ * scenario's UI competing with the controls for the same few units.
+ */
 .vk-play {
   position: relative;
-  gap: calc(var(--u) * 0.3);
+  gap: 0;
   padding: 0;
+  height: min(calc(100dvh - var(--u) * 4.5), calc(var(--u) * 26));
 }
 .vk-play__board {
   width: 100%;
-  height: min(70vh, calc(var(--u) * 22));
+  height: 100%;
   border-radius: var(--vk-radius);
   overflow: hidden;
 }
 /* The scenario's own screen, over the board it is played on. */
 .vk-quest-ui {
   position: absolute;
-  inset: 0 0 auto 0;
-  height: min(70vh, calc(var(--u) * 22));
+  inset: 0;
   pointer-events: none;
   overflow: hidden;
   border-radius: var(--vk-radius);
@@ -632,17 +638,52 @@ body {
   overflow-wrap: anywhere;
 }
 
+/*
+ * Dialogs float over the board, because that is where the game puts them.
+ *
+ * `DialogWindow.CreateWindow` places its text half a unit from the top of the
+ * screen, 28 units wide and centred, on the same canvas the board is drawn on
+ * — never beside it. `NextStageButton` puts the phase buttons at
+ * `GetBottom(-2.5)`, over the board's bottom edge.
+ */
 .vk-play__overlay {
+  position: absolute;
+  inset: 0;
   display: flex;
   justify-content: center;
+  align-items: flex-start;
+  /* Room at the bottom for the phase buttons that sit over the same board. */
+  padding: calc(var(--u) * 0.5) calc(var(--u) * 0.5) calc(var(--u) * 3.5);
+  pointer-events: none;
 }
 .vk-play__overlay:empty {
   display: none;
 }
+/* The panel itself is what takes the clicks; the rest of the layer is board. */
+.vk-play__overlay > * {
+  pointer-events: auto;
+  width: min(100%, calc(var(--u) * 28));
+  max-height: 100%;
+  overflow-y: auto;
+  background: var(--vk-surface);
+  border: 1px solid var(--vk-rule);
+  border-radius: var(--vk-radius);
+  padding: var(--vk-gap);
+  box-shadow: 0 calc(var(--u) * 0.2) calc(var(--u) * 0.8) rgb(0 0 0 / 45%);
+}
 .vk-play__controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--u) * 0.5);
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: calc(var(--u) * 0.3);
+  pointer-events: none;
+}
+.vk-play__controls > * {
+  pointer-events: auto;
 }
 .vk-play__phase {
   align-items: center;

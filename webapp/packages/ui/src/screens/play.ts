@@ -150,6 +150,9 @@ export function playScreen(options: PlayOptions): PlayScreen {
     ...(options.sources.onWarning === undefined ? {} : { onWarning: options.sources.onWarning }),
   })
 
+  // Order is paint order, and it is the game's: `QuestUICanvas` is created
+  // with `SetAsFirstSibling` so a scenario's own screen sits behind, and a
+  // dialog covers it rather than the other way round.
   const element = panel({
     class: 'vk-play',
     children: [surface, questUi.element, overlay, controls],
