@@ -578,3 +578,32 @@ body {
   font-variant-numeric: tabular-nums;
   color: var(--vk-muted);
 }
+
+/* ---- playing a quest ---- */
+.vk-play {
+  position: relative;
+  gap: calc(var(--u) * 0.3);
+  padding: 0;
+}
+.vk-play__board {
+  width: 100%;
+  height: min(70vh, calc(var(--u) * 22));
+  border-radius: var(--vk-radius);
+  overflow: hidden;
+}
+.vk-play__overlay {
+  display: flex;
+  justify-content: center;
+}
+.vk-play__overlay:empty {
+  display: none;
+}
+.vk-play__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 0.3);
+}
+.vk-play__phase {
+  align-items: center;
+  gap: calc(var(--u) * 0.3);
+}
