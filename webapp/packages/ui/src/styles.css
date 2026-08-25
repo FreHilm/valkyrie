@@ -715,3 +715,14 @@ body {
   text-align: center;
   font-size: var(--vk-text-small);
 }
+.vk-import__folders {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.15);
+  font-size: var(--vk-text-small);
+  font-family: var(--vk-mono, monospace);
+  color: var(--vk-muted);
+}

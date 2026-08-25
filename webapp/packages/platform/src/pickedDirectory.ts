@@ -28,7 +28,10 @@ export type PickedEntry = PickedFile | (PickedDirectory & { kind: 'directory' })
 export interface PickedSourceOptions {
   /** Only files whose name matches are listed. */
   accept?: (name: string) => boolean
-  /** Descend into subdirectories. Unity data folders are one level for assets. */
+  /**
+   * Descend into subdirectories. On by default: the download cache nests its
+   * bundles two levels deep, and a flat walk finds none of them.
+   */
   recursive?: boolean
 }
 
@@ -64,7 +67,7 @@ export class PickedDirectorySource {
     for await (const [name, entry] of directory.entries()) {
       const path = prefix.length === 0 ? name : `${prefix}/${name}`
       if (entry.kind === 'directory') {
-        if (this.options.recursive === true) await this.walk(entry, path, into)
+        if (this.options.recursive !== false) await this.walk(entry, path, into)
         continue
       }
       if (this.options.accept?.(name) === false) continue
@@ -107,16 +110,63 @@ export function canPickDirectory(): boolean {
 }
 
 /**
- * The Unity asset files an FFG import reads.
+ * Files an FFG import might read.
  *
- * Everything else in a data folder — the executable, the player settings, the
- * managed DLLs — is of no interest, and listing it only makes the import look
- * bigger than it is.
+ * This used to be a tight allow-list of the install's container names, which
+ * silently excluded the downloaded content cache: its bundles are nested two
+ * directories deep and every one of them is called `__data`. That cost 425 of
+ * 1,158 textures — most of the board art — and the import reported success.
+ *
+ * The importer already skips anything it cannot parse
+ * (`ffgImport.ts:244`), so the safe filter is a wide one: exclude what is
+ * obviously not an asset, and let the reader decide about the rest.
  */
 export function isUnityAsset(name: string): boolean {
-  if (name.endsWith('.resS') || name.endsWith('.resource')) return true
-  if (name === 'resources.assets' || name === 'globalgamemanagers') return true
-  if (/^level\d+$/.test(name)) return true
-  if (/^sharedassets\d+\.assets$/.test(name)) return true
-  return name.endsWith('.assets')
+  const file = name.slice(name.lastIndexOf('/') + 1)
+
+  // The download cache names every bundle `__data`, beside an `__info`.
+  if (file === '__data') return true
+  if (file === '__info') return false
+
+  // Managed assemblies and native libraries are large and never assets.
+  if (/\.(dll|so|dylib|exe|config|info|json|xml|txt)$/i.test(file)) return false
+
+  return true
+}
+
+/**
+ * Several picked directories presented as one source.
+ *
+ * Current builds keep almost nothing in the install: Mansions 2.1.6 downloads
+ * its scenarios, its text and most of its board art on first run. Importing
+ * only the install yields images and audio but no localisation — and a third
+ * of the textures missing, with the import reporting success.
+ *
+ * Later sources win a name clash, matching `sourceOver` in the import tool, so
+ * downloaded content overrides whatever shipped.
+ */
+export class CompositeAssetSource {
+  private index: Map<string, PickedDirectorySource> | null = null
+
+  constructor(private readonly sources: readonly PickedDirectorySource[]) {}
+
+  async list(): Promise<string[]> {
+    return [...(await this.build()).keys()].sort()
+  }
+
+  async read(name: string): Promise<Uint8Array> {
+    const source = (await this.build()).get(name)
+    if (source === undefined) throw new Error(`No such asset: ${name}`)
+    return source.read(name)
+  }
+
+  private async build(): Promise<Map<string, PickedDirectorySource>> {
+    if (this.index !== null) return this.index
+    const index = new Map<string, PickedDirectorySource>()
+    for (const source of this.sources) {
+      for (const name of await source.list()) index.set(name, source)
+    }
+    this.index = index
+    return index
+  }
 }

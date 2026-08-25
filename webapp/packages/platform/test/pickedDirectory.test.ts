@@ -9,7 +9,11 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { isUnityAsset, PickedDirectorySource } from '../src/pickedDirectory.js'
+import {
+  CompositeAssetSource,
+  isUnityAsset,
+  PickedDirectorySource,
+} from '../src/pickedDirectory.js'
 import type { PickedDirectory } from '../src/pickedDirectory.js'
 
 /** A directory handle over a plain object tree. */
@@ -69,18 +73,30 @@ describe('PickedDirectorySource', () => {
     expect(new TextDecoder().decode(bytes)).toBe('hello')
   })
 
-  it('does not descend by default, because a data folder is flat', async () => {
+  it('descends by default, because the download cache nests its bundles', async () => {
+    // Every bundle in the cache is called `__data`, two directories deep. A
+    // flat walk finds none of them — which silently cost 425 of 1,158
+    // textures while the import reported success.
+    const source = new PickedDirectorySource(
+      directory('cache', { mad22: { abc123: { __data: 'bundle', __info: 'meta' } } }),
+    )
+
+    // No filter here, so the sidecar is listed too; isUnityAsset excludes it.
+    expect(await source.list()).toEqual(['mad22/abc123/__data', 'mad22/abc123/__info'])
+  })
+
+  it('can be told not to descend', async () => {
     const source = new PickedDirectorySource(
       directory('Data', { 'resources.assets': 'a', Managed: { 'Assembly.dll': 'x' } }),
+      { recursive: false },
     )
 
     expect(await source.list()).toEqual(['resources.assets'])
   })
 
-  it('descends when asked, keeping names relative to the picked directory', async () => {
+  it('keeps names relative to the picked directory', async () => {
     const source = new PickedDirectorySource(
       directory('Data', { StreamingAssets: { 'content.ini': 'x' } }),
-      { recursive: true },
     )
 
     expect(await source.list()).toEqual(['StreamingAssets/content.ini'])
@@ -94,6 +110,15 @@ describe('PickedDirectorySource', () => {
     )
 
     expect(await source.list()).toEqual(['resources.assets'])
+  })
+
+  it('accepts the download cache’s bundles through the same filter', async () => {
+    const source = new PickedDirectorySource(
+      directory('cache', { mad22: { abc: { __data: 'bundle', __info: 'meta' } } }),
+      { accept: isUnityAsset },
+    )
+
+    expect(await source.list()).toEqual(['mad22/abc/__data'])
   })
 
   it('lists once, however often it is asked', async () => {
@@ -138,9 +163,56 @@ describe('isUnityAsset', () => {
     }
   })
 
-  it('rejects everything else, so the import does not look bigger than it is', () => {
-    for (const name of ['UnityPlayer.dll', 'boot.config', 'app.info', 'Assembly-CSharp.dll']) {
+  it('accepts the download cache’s bundles, which are all called __data', () => {
+    // A tight allow-list of install container names excluded these entirely.
+    expect(isUnityAsset('mad22/abc123/__data')).toBe(true)
+    expect(isUnityAsset('__data')).toBe(true)
+  })
+
+  it('rejects the cache’s metadata sidecar', () => {
+    expect(isUnityAsset('mad22/abc123/__info')).toBe(false)
+  })
+
+  it('rejects what is obviously not an asset', () => {
+    for (const name of ['UnityPlayer.dll', 'boot.config', 'app.info', 'Managed/Assembly.dll']) {
       expect(isUnityAsset(name)).toBe(false)
     }
+  })
+})
+
+describe('CompositeAssetSource', () => {
+  it('presents several folders as one', async () => {
+    // Mansions 2.1.6 downloads most of its board art on first run, so
+    // importing only the install loses a third of the textures — and reports
+    // success while doing it.
+    const install = new PickedDirectorySource(directory('Data', { 'resources.assets': 'a' }))
+    const cache = new PickedDirectorySource(
+      directory('cache', { mad22: { abc: { __data: 'bundle' } } }),
+    )
+    const both = new CompositeAssetSource([install, cache])
+
+    expect(await both.list()).toEqual(['mad22/abc/__data', 'resources.assets'])
+  })
+
+  it('reads from whichever folder holds the file', async () => {
+    const install = new PickedDirectorySource(
+      directory('Data', { 'resources.assets': 'from-install' }),
+    )
+    const cache = new PickedDirectorySource(directory('cache', { extra: 'from-cache' }))
+    const both = new CompositeAssetSource([install, cache])
+
+    expect(new TextDecoder().decode(await both.read('extra'))).toBe('from-cache')
+  })
+
+  it('lets downloaded content override what shipped', async () => {
+    const install = new PickedDirectorySource(directory('Data', { shared: 'old' }))
+    const cache = new PickedDirectorySource(directory('cache', { shared: 'new' }))
+    const both = new CompositeAssetSource([install, cache])
+
+    expect(new TextDecoder().decode(await both.read('shared'))).toBe('new')
+  })
+
+  it('is empty with no folders', async () => {
+    expect(await new CompositeAssetSource([]).list()).toEqual([])
   })
 })

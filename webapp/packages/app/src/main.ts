@@ -54,6 +54,7 @@ import {
   isUnityAsset,
   MemoryFileSystem,
   OpfsFileSystem,
+  CompositeAssetSource,
   PickedDirectorySource,
   StoragePaths,
   TextureCache,
@@ -531,23 +532,38 @@ function addScenario(): void {
  * into OPFS; nothing is uploaded and nothing is written back to the folder.
  */
 function importDemo(): void {
+  // Both the install and the downloaded content folder: recent builds keep
+  // most of the board art and all of the text in the latter, and importing
+  // only the install loses a third of the textures while reporting success.
+  const folders: PickedDirectorySource[] = []
+
   const screen = importScreen({
     supported: canPickDirectory(),
     formatBytes,
     onCancel: menu,
-    onImport: async (report) => {
+    onPickFolder: async () => {
       const picker = (globalThis as { showDirectoryPicker?: () => Promise<PickedDirectory> })
         .showDirectoryPicker
-      if (picker === undefined) throw new Error('This browser cannot open a folder.')
-
-      const source = new PickedDirectorySource(await picker(), { accept: isUnityAsset })
+      if (picker === undefined) return null
+      try {
+        const source = new PickedDirectorySource(await picker(), { accept: isUnityAsset })
+        folders.push(source)
+        return source.name
+      } catch {
+        // The player closed the picker.
+        return null
+      }
+    },
+    onImport: async (report) => {
+      const source = new CompositeAssetSource(folders)
       const names = await source.list()
       if (names.length === 0) {
         // The commonest mistake is choosing the app rather than its data
         // folder, and "0 assets imported" does not explain that.
         throw new Error(
-          'That folder holds no Unity assets. Choose the game’s Data folder — ' +
-            'on macOS it is inside the .app, under Contents/Resources/Data.',
+          'Those folders hold no Unity assets. The game’s data folder is inside ' +
+            'the .app on macOS, under Contents/Resources/Data; the downloaded ' +
+            'content is in ~/Library/Caches/com.fantasyflightgames.mom.',
         )
       }
 

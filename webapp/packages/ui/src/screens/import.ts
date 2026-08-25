@@ -34,6 +34,9 @@ export interface ImportSummary {
 
 export interface ImportStrings {
   title: Text
+  chosen: Text
+  startImport: Text
+  cacheHint: Text
   explain: Text
   privacy: Text
   choose: Text
@@ -48,13 +51,21 @@ const DEFAULT_STRINGS: ImportStrings = {
   title: rawText('Import your game files'),
   explain: rawText(
     'Valkyrie needs the artwork and audio from a copy of the game you own. ' +
-      'Choose the game’s data folder and they will be read once.',
+      'Choose the game’s data folder, then its downloaded content folder — ' +
+      'recent versions download most of the board art and all of the text on ' +
+      'first run, so the install alone is not enough.',
   ),
   privacy: rawText(
     'The files stay in this browser on this device. Nothing is uploaded, and ' +
       'Valkyrie can only read the folder you choose.',
   ),
-  choose: rawText('Choose the game folder'),
+  choose: rawText('Add a folder'),
+  chosen: rawText('Folders to read'),
+  startImport: rawText('Import'),
+  cacheHint: rawText(
+    'Without the downloaded content folder about a third of the artwork is ' +
+      'missing and the import still reports success.',
+  ),
   cancel: rawText('Cancel'),
   retry: rawText('Try again'),
   unsupported: rawText(
@@ -66,7 +77,9 @@ const DEFAULT_STRINGS: ImportStrings = {
 }
 
 export interface ImportOptions {
-  /** Opens the picker and runs the import. Rejects if the player cancels. */
+  /** Opens the picker and returns the folder's name, or null if cancelled. */
+  onPickFolder?: () => Promise<string | null>
+  /** Reads every chosen folder. */
   onImport: (report: (progress: ImportProgress) => void) => Promise<ImportSummary>
   /** Whether this browser can open a directory at all. */
   supported: boolean
@@ -88,6 +101,8 @@ export function importScreen(options: ImportOptions): ImportScreen {
   const element = panel({ class: 'vk-import' })
 
   let phase: ImportPhase = options.supported ? 'idle' : 'unsupported'
+  /** Folders the player has handed over, in the order they chose them. */
+  const chosen: string[] = []
   let progress: ImportProgress = { done: 0, total: 0, what: '' }
   let summary: ImportSummary | null = null
   let failure = ''
@@ -114,12 +129,33 @@ export function importScreen(options: ImportOptions): ImportScreen {
           element.append(label(rawText(failure), { class: 'vk-import__error' }))
         }
       }
+      if (chosen.length > 0) {
+        element.append(label(strings.chosen, { heading: 3 }))
+        const list = el('ul', { class: 'vk-import__folders' })
+        for (const name of chosen) list.append(el('li', { text: name }))
+        element.append(list)
+      }
+      if (chosen.length === 1) {
+        // Said while it can still be acted on, not after the import.
+        element.append(label(strings.cacheHint, { class: 'vk-import__note' }))
+      }
+
       const actions = el('div', { class: 'vk-import__actions', attrs: { role: 'group' } })
+      if (options.onPickFolder !== undefined) {
+        actions.append(
+          button(strings.choose, {
+            onPress: () => void pick(),
+            variant: chosen.length === 0 ? 'primary' : 'secondary',
+            size: 'medium',
+          }),
+        )
+      }
       actions.append(
-        button(phase === 'failed' ? strings.retry : strings.choose, {
+        button(phase === 'failed' ? strings.retry : strings.startImport, {
           onPress: () => void run(),
           variant: 'primary',
           size: 'medium',
+          disabled: options.onPickFolder !== undefined && chosen.length === 0,
         }),
       )
       if (options.onCancel !== undefined) {
@@ -166,6 +202,13 @@ export function importScreen(options: ImportOptions): ImportScreen {
         element.append(button(strings.cancel, { onPress: options.onCancel }))
       }
     }
+  }
+
+  async function pick(): Promise<void> {
+    const name = await options.onPickFolder?.()
+    // A cancelled picker is not a failure; it just adds nothing.
+    if (name !== null && name !== undefined) chosen.push(name)
+    render()
   }
 
   async function run(): Promise<void> {

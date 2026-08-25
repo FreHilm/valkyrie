@@ -64,14 +64,12 @@ describe('importScreen', () => {
 
     expect(screen.phase()).toBe('unsupported')
     expect(screen.element.textContent).toContain('Chrome, Edge and Opera')
-    expect(buttons(screen.element).map((b) => b.textContent)).not.toContain(
-      'Choose the game folder',
-    )
+    expect(buttons(screen.element).map((b) => b.textContent)).not.toContain('Import')
   })
 
   it('runs the import and reports what was stored', async () => {
     const screen = make({ formatBytes: () => '413 MB' })
-    press(screen.element, 'Choose the game folder')
+    press(screen.element, 'Import')
     await vi.waitFor(() => expect(screen.phase()).toBe('done'))
 
     expect(screen.element.textContent).toContain('1146')
@@ -81,7 +79,7 @@ describe('importScreen', () => {
 
   it('mentions skipped assets rather than quietly losing them', async () => {
     const screen = make()
-    press(screen.element, 'Choose the game folder')
+    press(screen.element, 'Import')
     await vi.waitFor(() => expect(screen.phase()).toBe('done'))
 
     expect(screen.element.textContent).toContain('Skipped')
@@ -89,7 +87,7 @@ describe('importScreen', () => {
 
   it('omits the skipped row when nothing was skipped', async () => {
     const screen = make({ onImport: async () => ({ ...SUMMARY, skipped: 0 }) })
-    press(screen.element, 'Choose the game folder')
+    press(screen.element, 'Import')
     await vi.waitFor(() => expect(screen.phase()).toBe('done'))
 
     expect(screen.element.textContent).not.toContain('Skipped')
@@ -105,7 +103,7 @@ describe('importScreen', () => {
         })
       },
     })
-    press(screen.element, 'Choose the game folder')
+    press(screen.element, 'Import')
 
     expect(screen.phase()).toBe('importing')
     report?.({ done: 3, total: 10, what: 'Tile_Foyer' })
@@ -117,7 +115,7 @@ describe('importScreen', () => {
     const screen = make({
       onImport: () => Promise.reject(new Error('The folder is not a game data folder')),
     })
-    press(screen.element, 'Choose the game folder')
+    press(screen.element, 'Import')
     await vi.waitFor(() => expect(screen.phase()).toBe('failed'))
 
     expect(screen.element.textContent).toContain('not a game data folder')
@@ -126,7 +124,7 @@ describe('importScreen', () => {
 
   it('treats a cancelled picker as something to retry, not an error to dwell on', async () => {
     const screen = make({ onImport: () => Promise.reject(new Error('')) })
-    press(screen.element, 'Choose the game folder')
+    press(screen.element, 'Import')
     await vi.waitFor(() => expect(screen.phase()).toBe('failed'))
 
     expect(buttons(screen.element).map((b) => b.textContent)).toContain('Try again')
@@ -135,7 +133,77 @@ describe('importScreen', () => {
   it('reports the summary to the caller', async () => {
     const onDone = vi.fn()
     const screen = make({ onDone })
-    press(screen.element, 'Choose the game folder')
+    press(screen.element, 'Import')
     await vi.waitFor(() => expect(onDone).toHaveBeenCalledWith(SUMMARY))
+  })
+})
+
+describe('choosing folders', () => {
+  it('needs at least one folder before it will import', () => {
+    const screen = importScreen({
+      supported: true,
+      onPickFolder: async () => 'Data',
+      onImport: async () => SUMMARY,
+    })
+    document.body.append(screen.element)
+
+    expect(buttons(screen.element).find((b) => b.textContent === 'Import')?.disabled).toBe(true)
+  })
+
+  it('lists what has been handed over', async () => {
+    const screen = importScreen({
+      supported: true,
+      onPickFolder: async () => 'Data',
+      onImport: async () => SUMMARY,
+    })
+    document.body.append(screen.element)
+    press(screen.element, 'Add a folder')
+    await vi.waitFor(() => expect(screen.element.textContent).toContain('Folders to read'))
+
+    expect(screen.element.textContent).toContain('Data')
+  })
+
+  it('warns while only the install has been chosen', async () => {
+    // Said while it can still be acted on. Recent builds download most of the
+    // board art on first run, so the install alone loses about a third of the
+    // textures — and the import reports success either way.
+    const screen = importScreen({
+      supported: true,
+      onPickFolder: async () => 'Data',
+      onImport: async () => SUMMARY,
+    })
+    document.body.append(screen.element)
+    press(screen.element, 'Add a folder')
+    await vi.waitFor(() => expect(screen.element.textContent).toContain('a third of the artwork'))
+  })
+
+  it('stops warning once a second folder is added', async () => {
+    let next = 'Data'
+    const screen = importScreen({
+      supported: true,
+      onPickFolder: async () => next,
+      onImport: async () => SUMMARY,
+    })
+    document.body.append(screen.element)
+    press(screen.element, 'Add a folder')
+    await vi.waitFor(() => expect(screen.element.textContent).toContain('a third of the artwork'))
+    next = 'cache'
+    press(screen.element, 'Add a folder')
+    await vi.waitFor(() =>
+      expect(screen.element.textContent).not.toContain('a third of the artwork'),
+    )
+  })
+
+  it('treats a cancelled picker as adding nothing', async () => {
+    const screen = importScreen({
+      supported: true,
+      onPickFolder: async () => null,
+      onImport: async () => SUMMARY,
+    })
+    document.body.append(screen.element)
+    press(screen.element, 'Add a folder')
+    await vi.waitFor(() =>
+      expect(buttons(screen.element).find((b) => b.textContent === 'Import')?.disabled).toBe(true),
+    )
   })
 })

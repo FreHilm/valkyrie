@@ -162,7 +162,12 @@ export type { Crop, Texture, TextureCacheOptions, TextureReader } from './textur
 export { loadContent, loadQuest, textureResolver } from './questLoading.js'
 export type { ContentOptions, LoadedContent, LoadedQuest } from './questLoading.js'
 
-export { PickedDirectorySource, canPickDirectory, isUnityAsset } from './pickedDirectory.js'
+export {
+  CompositeAssetSource,
+  PickedDirectorySource,
+  canPickDirectory,
+  isUnityAsset,
+} from './pickedDirectory.js'
 export type {
   PickedDirectory,
   PickedEntry,
