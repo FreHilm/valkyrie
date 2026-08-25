@@ -18,6 +18,7 @@ import {
   inventory,
   options,
   monsterDialog,
+  playScreen,
   questLog,
   button,
   el,
@@ -44,7 +45,9 @@ import {
   StringKey,
 } from '@valkyrie/core'
 import type { ActivationView, AttackView, EventsView, MonsterInstance } from '@valkyrie/core'
-import { MemoryFileSystem, StoragePaths } from '@valkyrie/platform'
+import { MemoryFileSystem, OpfsFileSystem, StoragePaths, TextureCache } from '@valkyrie/platform'
+import type { Crop, StorageManagerLike } from '@valkyrie/platform'
+import { libraryPaths, startQuest, surveyLibrary } from './library.js'
 import { formatBytes, storageReport } from './storage.js'
 import { persistenceMessage, requestPersistence } from './persistence.js'
 import { watchForUpdate } from './serviceWorker.js'
@@ -107,6 +110,7 @@ function menu(): void {
         mainMenu({
           title: rawText('Main menu'),
           actions: [
+            { label: rawText('Play a quest'), onPress: () => void library() },
             { label: rawText('Browse quests'), onPress: quests },
             { label: rawText('Board renderer'), onPress: boardDemo },
             { label: rawText('Event dialog'), onPress: eventDemo },
@@ -347,6 +351,114 @@ function monsterDemo(): void {
       children: [backTo(menu), dialog.element, status, label(rawText('Quest log')), entries],
     }),
   )
+}
+
+/**
+ * What is actually in storage, and playing it.
+ *
+ * Nothing is imported in a fresh browser, so the honest thing is to say so and
+ * name the two pieces that are missing rather than showing an empty list — the
+ * Unity app's failure mode when the import has not run.
+ */
+async function library(): Promise<void> {
+  // OPFS is the browser's own private storage; nothing here reaches the disk
+  // the user can see.
+  // The DOM lib's FileSystemDirectoryHandle omits `entries()`, which the File
+  // System Access spec defines and every implementation ships; the types lag.
+  const fs = new OpfsFileSystem(navigator.storage as unknown as StorageManagerLike)
+  const paths = libraryPaths(
+    new StoragePaths({ appData: '/appdata', content: '/content', temp: '/tmp' }, 'MoM'),
+  )
+
+  let state
+  try {
+    state = await surveyLibrary(fs, paths)
+  } catch {
+    state = { hasContent: false, packs: [], quests: [] }
+  }
+
+  const children = [backTo(menu), label(rawText('Play a quest'), { size: 'large', heading: 1 })]
+
+  if (!state.hasContent) {
+    children.push(
+      label(
+        rawText(
+          'No content is imported yet. Valkyrie needs the art and audio from a ' +
+            'licensed Mansions of Madness or Descent install, which stay on this ' +
+            'device and are never uploaded.',
+        ),
+      ),
+    )
+  }
+
+  if (state.quests.length === 0) {
+    children.push(
+      label(
+        rawText(
+          state.hasContent
+            ? 'Content is ready. No scenarios have been downloaded yet.'
+            : 'No scenarios have been downloaded yet either.',
+        ),
+      ),
+    )
+  } else {
+    children.push(
+      mainMenu({
+        title: rawText('Scenarios'),
+        actions: state.quests.map((quest) => ({
+          label: rawText(`${quest.name} (${quest.type})`),
+          onPress: () => void play(fs, paths, quest.path),
+        })),
+      }),
+    )
+  }
+
+  children.push(
+    label(rawText(`${state.packs.length} content packs, ${state.quests.length} scenarios`), {
+      class: 'vk-shell__status',
+    }),
+  )
+
+  show(panel({ class: 'vk-shell', children }))
+}
+
+/** Loads a scenario from storage and plays it. */
+async function play(
+  fs: OpfsFileSystem,
+  paths: ReturnType<typeof libraryPaths>,
+  questPath: string,
+): Promise<void> {
+  const { session, resolveTexture } = await startQuest(fs, paths, questPath)
+  session.runtime.heroes.push(
+    { heroName: 'HeroAshcanPete', activated: false },
+    { heroName: 'HeroAgnesBaker', activated: false },
+  )
+  session.start()
+
+  const textures = new TextureCache({
+    read: async (path) => {
+      try {
+        return await fs.readBytes(path)
+      } catch {
+        return null
+      }
+    },
+  })
+
+  const screen = playScreen({
+    session,
+    sources: {
+      onGrid: false,
+      // Art wiring for tiles and tokens lands with the content lookup; the
+      // board places and hit-tests them either way.
+      tile: () => null,
+      token: () => null,
+      monster: () => null,
+    },
+    loadTexture: (path: string, crop?: Crop) => textures.load(resolveTexture(path) ?? path, crop),
+  })
+
+  show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
 }
 
 /**
