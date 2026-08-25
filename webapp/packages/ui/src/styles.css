@@ -607,3 +607,42 @@ body {
   align-items: center;
   gap: calc(var(--u) * 0.3);
 }
+
+/* ---- importing ---- */
+.vk-import {
+  max-width: calc(var(--u) * 26);
+  gap: calc(var(--u) * 0.4);
+}
+.vk-import__privacy {
+  color: var(--vk-muted);
+  font-size: var(--vk-text-small);
+}
+.vk-import__note {
+  color: var(--vk-muted);
+}
+.vk-import__error {
+  color: var(--vk-danger, #c0392b);
+}
+.vk-import__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 0.3);
+}
+.vk-import__progress {
+  width: 100%;
+  height: calc(var(--u) * 0.5);
+}
+.vk-import__summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: calc(var(--u) * 0.15) calc(var(--u) * 0.5);
+  margin: 0;
+}
+.vk-import__summary dt {
+  color: var(--vk-muted);
+  font-size: var(--vk-text-small);
+}
+.vk-import__summary dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}

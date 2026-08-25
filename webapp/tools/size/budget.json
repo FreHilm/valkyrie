@@ -5,18 +5,18 @@
     "files": 37
   },
   "@valkyrie/platform": {
-    "raw": 206654,
-    "gzip": 63123,
-    "files": 22
+    "raw": 210491,
+    "gzip": 64519,
+    "files": 23
   },
   "@valkyrie/ui": {
-    "raw": 86583,
-    "gzip": 30512,
-    "files": 20
+    "raw": 92769,
+    "gzip": 32459,
+    "files": 21
   },
   "@valkyrie/app": {
-    "raw": 37423,
-    "gzip": 12811,
+    "raw": 39773,
+    "gzip": 13448,
     "files": 6
   }
 }

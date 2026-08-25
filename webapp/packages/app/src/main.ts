@@ -17,6 +17,7 @@ import {
   endGame,
   inventory,
   options,
+  importScreen,
   monsterDialog,
   playScreen,
   questLog,
@@ -45,8 +46,18 @@ import {
   StringKey,
 } from '@valkyrie/core'
 import type { ActivationView, AttackView, EventsView, MonsterInstance } from '@valkyrie/core'
-import { MemoryFileSystem, OpfsFileSystem, StoragePaths, TextureCache } from '@valkyrie/platform'
-import type { Crop, StorageManagerLike } from '@valkyrie/platform'
+import {
+  canPickDirectory,
+  canvasTextureEncoder,
+  importFfgApp,
+  isUnityAsset,
+  MemoryFileSystem,
+  OpfsFileSystem,
+  PickedDirectorySource,
+  StoragePaths,
+  TextureCache,
+} from '@valkyrie/platform'
+import type { Crop, PickedDirectory, StorageManagerLike } from '@valkyrie/platform'
 import { libraryPaths, startQuest, surveyLibrary } from './library.js'
 import { formatBytes, storageReport } from './storage.js'
 import { persistenceMessage, requestPersistence } from './persistence.js'
@@ -111,6 +122,7 @@ function menu(): void {
           title: rawText('Main menu'),
           actions: [
             { label: rawText('Play a quest'), onPress: () => void library() },
+            { label: rawText('Import game files'), onPress: importDemo },
             { label: rawText('Browse quests'), onPress: quests },
             { label: rawText('Board renderer'), onPress: boardDemo },
             { label: rawText('Event dialog'), onPress: eventDemo },
@@ -351,6 +363,63 @@ function monsterDemo(): void {
       children: [backTo(menu), dialog.element, status, label(rawText('Quest log')), entries],
     }),
   )
+}
+
+/**
+ * Importing a licensed install's assets into browser storage.
+ *
+ * The picker is the only way a browser can read outside its own origin, and it
+ * grants access to the chosen folder alone. What is read is decoded straight
+ * into OPFS; nothing is uploaded and nothing is written back to the folder.
+ */
+function importDemo(): void {
+  const screen = importScreen({
+    supported: canPickDirectory(),
+    formatBytes,
+    onCancel: menu,
+    onImport: async (report) => {
+      const picker = (globalThis as { showDirectoryPicker?: () => Promise<PickedDirectory> })
+        .showDirectoryPicker
+      if (picker === undefined) throw new Error('This browser cannot open a folder.')
+
+      const source = new PickedDirectorySource(await picker(), { accept: isUnityAsset })
+      const names = await source.list()
+      if (names.length === 0) {
+        // The commonest mistake is choosing the app rather than its data
+        // folder, and "0 assets imported" does not explain that.
+        throw new Error(
+          'That folder holds no Unity assets. Choose the game’s Data folder — ' +
+            'on macOS it is inside the .app, under Contents/Resources/Data.',
+        )
+      }
+
+      const fs = new OpfsFileSystem(navigator.storage as unknown as StorageManagerLike)
+      const paths = new StoragePaths(
+        { appData: '/appdata', content: '/content', temp: '/tmp' },
+        'MoM',
+      )
+      const result = await importFfgApp({
+        fs,
+        source,
+        importPath: paths.importPath,
+        game: 'MoM',
+        encodeTexture: canvasTextureEncoder(),
+        onProgress: (done, total, what) => report({ done, total, what }),
+      })
+      return {
+        textures: result.textures,
+        audio: result.audio,
+        text: result.text,
+        bytesWritten: result.bytesWritten,
+        skipped: result.skipped.length,
+      }
+    },
+    onDone: () => {
+      /* the library screen picks it up from storage */
+    },
+  })
+
+  show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
 }
 
 /**
