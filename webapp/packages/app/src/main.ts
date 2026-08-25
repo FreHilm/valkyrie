@@ -1022,6 +1022,46 @@ async function storage(): Promise<void> {
   )
 }
 
+/**
+ * Anything that escapes, shown on the page.
+ *
+ * A browser reports an unhandled error to a console the player is not looking
+ * at, so a failure reads as the app doing nothing. This puts the message where
+ * it can be seen and copied.
+ */
+function reportFailure(what: string, detail: string): void {
+  const existing = document.querySelector('.vk-failure')
+  if (existing !== null) existing.remove()
+  const box = el('div', {
+    class: 'vk-failure',
+    children: [
+      label(rawText(what), { heading: 2, size: 'medium' }),
+      el('pre', { class: 'vk-failure__detail', text: detail }),
+      button(rawText('Dismiss'), {
+        onPress: () => {
+          document.querySelector('.vk-failure')?.remove()
+        },
+      }),
+    ],
+  })
+  document.body.append(box)
+}
+
+window.addEventListener('error', (event) => {
+  reportFailure(
+    'Something went wrong',
+    `${event.message}\n${event.filename}:${String(event.lineno)}`,
+  )
+})
+
+window.addEventListener('unhandledrejection', (event) => {
+  const reason: unknown = event.reason
+  reportFailure(
+    'Something went wrong',
+    reason instanceof Error ? `${reason.message}\n${reason.stack ?? ''}` : String(reason),
+  )
+})
+
 menu()
 
 // Registered only in a built app; the dev server has no worker to register.

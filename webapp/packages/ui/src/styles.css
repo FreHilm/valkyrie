@@ -726,3 +726,27 @@ body {
   font-family: var(--vk-mono, monospace);
   color: var(--vk-muted);
 }
+
+/* Failures the player would otherwise never see. */
+.vk-failure {
+  position: fixed;
+  inset: auto calc(var(--u) * 0.4) calc(var(--u) * 0.4) calc(var(--u) * 0.4);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.3);
+  padding: calc(var(--u) * 0.4);
+  border-radius: var(--vk-radius);
+  border: 1px solid var(--vk-danger, #c0392b);
+  background: var(--vk-surface);
+  color: var(--vk-text);
+  max-height: 50vh;
+  overflow: auto;
+}
+.vk-failure__detail {
+  margin: 0;
+  font-family: var(--vk-mono, monospace);
+  font-size: var(--vk-text-small);
+  white-space: pre-wrap;
+  user-select: text;
+}
