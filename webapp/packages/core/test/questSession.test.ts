@@ -378,3 +378,115 @@ activation=Custom
     expect(quest.runtime.monsters.map((m) => m.monsterName)).toEqual(['MonsterZombie'])
   })
 })
+
+describe('puzzles', () => {
+  const puzzleQuest = (kind: string, extra = '') => `[EventOpen]
+trigger=EventStart
+display=false
+buttons=1
+event1=PuzzleThing
+[PuzzleThing]
+class=${kind}
+level=3
+altlevel=3
+buttons=1
+event1=EventAfter
+${extra}
+[EventAfter]
+buttons=1
+event1=
+`
+
+  it('opens a puzzle instead of a dialog', () => {
+    // EventManager.cs:309 opens the window and returns; the event's buttons do
+    // not appear until it is solved.
+    const quest = session(puzzleQuest('tower'))
+    quest.start()
+    const view = quest.view()
+
+    expect(view.kind).toBe('puzzle')
+    expect(view.kind === 'puzzle' && view.puzzle.kind).toBe('tower')
+    expect(view.kind === 'puzzle' && view.puzzle.solved).toBe(false)
+  })
+
+  it('builds each kind the quest can ask for', () => {
+    for (const kind of ['tower', 'code', 'image']) {
+      const quest = session(puzzleQuest(kind))
+      quest.start()
+
+      expect(quest.view().kind).toBe('puzzle')
+    }
+  })
+
+  it('keeps the same board when the player steps away and returns', () => {
+    // Quest.puzzle holds them so a player comes back to their progress rather
+    // than a fresh puzzle.
+    const quest = session(puzzleQuest('tower'))
+    quest.start()
+    const first = quest.view()
+    const state = first.kind === 'puzzle' ? first.puzzle.state : null
+
+    quest.closePuzzle()
+    quest.activate('PuzzleThing')
+    const second = quest.view()
+
+    expect(second.kind === 'puzzle' && second.puzzle.state).toBe(state)
+  })
+
+  it('takes the event’s button once it is solved', () => {
+    const quest = session(puzzleQuest('tower'))
+    quest.start()
+    quest.finishPuzzle('PuzzleThing')
+
+    expect(quest.view().kind === 'event' && quest.view().name).toBe('EventAfter')
+  })
+
+  it('discards a solved puzzle, so opening it again is a fresh one', () => {
+    const quest = session(puzzleQuest('tower'))
+    quest.start()
+    const first = quest.view()
+    const state = first.kind === 'puzzle' ? first.puzzle.state : null
+
+    quest.finishPuzzle('PuzzleThing')
+    quest.activate('PuzzleThing')
+    const second = quest.view()
+
+    expect(second.kind === 'puzzle' && second.puzzle.state).not.toBe(state)
+  })
+
+  it('says so rather than opening an empty slide puzzle with no layouts', () => {
+    // Slide layouts are shipped data, not generated. The C# calls
+    // Application.Quit() when it cannot find one.
+    const quest = session(puzzleQuest('slide'))
+    quest.start()
+    // The puzzle is built when the screen asks what to show, not when the
+    // event fires — so the failure surfaces there.
+    const view = quest.view()
+
+    expect(view.kind).toBe('event')
+    expect(quest.runtime.log.toArray().some((e) => e.entry.includes('Unable to build'))).toBe(true)
+  })
+
+  it('builds a slide puzzle from the layouts it is given', () => {
+    const components = loadQuestSections(readFromString(puzzleQuest('slide')), 'test.ini', {})
+    const layouts = new Map([
+      [
+        'PuzzleSlide1',
+        new Map([
+          ['moves', '3'],
+          ['block0', 'False,2,1,0,2,True'],
+        ]),
+      ],
+    ])
+    const quest = new QuestSession({
+      bundle: bundleQuest(components),
+      components,
+      slideLayouts: layouts,
+      random: () => 0,
+    })
+    quest.runtime.heroes.push({ heroName: 'HeroAshcanPete', activated: false })
+    quest.start()
+
+    expect(quest.view().kind).toBe('puzzle')
+  })
+})

@@ -40,6 +40,8 @@ function session(view: ReturnType<PlayableSession['view']>, over: Partial<Playab
   const base: PlayableSession = {
     view: () => view,
     press: (i) => calls.push(`press:${i}`),
+    finishPuzzle: (n) => calls.push(`finishPuzzle:${n}`),
+    closePuzzle: () => calls.push('closePuzzle'),
     activate: (n) => calls.push(`activate:${n}`),
     activationDone: () => calls.push('activationDone'),
     phaseAcknowledged: () => calls.push('phaseAcknowledged'),
@@ -186,5 +188,73 @@ describe('playScreen', () => {
     screen.refresh()
 
     expect(loadTexture).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('puzzles', () => {
+  const PUZZLE = {
+    kind: 'puzzle',
+    puzzle: { name: 'PuzzleFrontDoor', kind: 'tower' as const, state: { moves: 4 }, solved: false },
+  }
+
+  it('hands the puzzle to the renderer instead of showing a dialog', () => {
+    // EventManager.cs:309 opens the window and returns; the event's own
+    // buttons do not appear until it is solved.
+    const seen: unknown[] = []
+    const { session: s } = session(PUZZLE)
+    const screen = playScreen({
+      session: s,
+      sources: SOURCES,
+      onPuzzle: (puzzle, chrome, into) => {
+        seen.push({ puzzle, moves: chrome.moves })
+        into.append(document.createElement('div'))
+      },
+    })
+    document.body.append(screen.element)
+
+    expect(seen).toEqual([{ puzzle: PUZZLE.puzzle, moves: 4 }])
+    expect(screen.element.textContent).not.toContain('End investigator turn')
+  })
+
+  it('finishes the puzzle by name when it is solved', () => {
+    const { session: s, calls } = session(PUZZLE)
+    let solved: (() => void) | null = null
+    const screen = playScreen({
+      session: s,
+      sources: SOURCES,
+      onPuzzle: (_p, chrome) => {
+        solved = chrome.onSolved
+      },
+    })
+    document.body.append(screen.element)
+    solved?.()
+
+    expect(calls).toContain('finishPuzzle:PuzzleFrontDoor')
+  })
+
+  it('closes without solving, which keeps the board', () => {
+    const { session: s, calls } = session(PUZZLE)
+    let giveUp: (() => void) | null = null
+    const screen = playScreen({
+      session: s,
+      sources: SOURCES,
+      onPuzzle: (_p, chrome) => {
+        giveUp = chrome.onGiveUp
+      },
+    })
+    document.body.append(screen.element)
+    giveUp?.()
+
+    expect(calls).toContain('closePuzzle')
+  })
+
+  it('shows the board with no overlay when no renderer is supplied', () => {
+    // A shell that only browses quests should not have to pull the four puzzle
+    // screens in.
+    const { session: s } = session(PUZZLE)
+    const screen = playScreen({ session: s, sources: SOURCES })
+    document.body.append(screen.element)
+
+    expect(screen.element.querySelector('canvas')).not.toBeNull()
   })
 })

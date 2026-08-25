@@ -35,7 +35,10 @@ import type { MonsterTypeView, RoundRequest } from './RoundController.js'
 import type { QuestBundle } from './questAdapter.js'
 import { QuestButtonData } from './QuestButtonData.js'
 import type { QuestComponent } from './QuestComponent.js'
-import { QuestEvent, Spawn as QuestSpawn } from './QuestComponent.js'
+import { Puzzle as QuestPuzzle, QuestEvent, Spawn as QuestSpawn } from './QuestComponent.js'
+import { PuzzleCode, PuzzleImage, PuzzleSlide, PuzzleTower } from './puzzles.js'
+import type { PuzzleState } from './puzzles.js'
+import type { ContentFields } from '../content/types.js'
 import { outputSymbolReplace } from './symbols.js'
 import type { Localization } from '../i18n/Localization.js'
 import { LogEntry } from './QuestLog.js'
@@ -53,8 +56,18 @@ export interface SessionButton {
   disabled: boolean
 }
 
+/** A puzzle in progress, with the state the screens read. */
+export interface ActivePuzzle {
+  name: string
+  kind: 'slide' | 'code' | 'image' | 'tower'
+  state: PuzzleState
+  /** Solved puzzles offer the event's button; unsolved ones offer a way out. */
+  solved: boolean
+}
+
 export type SessionView =
   | { kind: 'event'; name: string; text: string; buttons: SessionButton[] }
+  | { kind: 'puzzle'; puzzle: ActivePuzzle }
   | { kind: 'activation'; monster: MonsterInstance; activation: ActivationInstance }
   | { kind: 'phase'; phase: MoMPhase }
   | { kind: 'ended' }
@@ -74,6 +87,12 @@ export interface SessionOptions {
    * activation fails and the monster phase does nothing.
    */
   contentActivations?: ReadonlyMap<string, ActivationView>
+  /**
+   * Slide puzzle layouts, from `Resources/slidepuzzles.txt`. They are shipped
+   * data rather than generated, so without them a slide puzzle cannot be
+   * built at all.
+   */
+  slideLayouts?: ReadonlyMap<string, ContentFields>
   /** The parsed components, for the text and buttons an event shows. */
   components: ReadonlyMap<string, QuestComponent>
   gameType?: 'MoM' | 'D2E'
@@ -92,6 +111,8 @@ export class QuestSession {
   private pending: RoundRequest | null = null
   /** `Quest.monsterSelect`: what each spawn section resolved to. */
   private readonly monsterSelect = new Map<string, string>()
+  /** `Quest.puzzle`: puzzles in progress, kept until solved. */
+  private readonly puzzles = new Map<string, PuzzleState>()
   private readonly options: SessionOptions
   private readonly gameType: 'MoM' | 'D2E'
   private readonly random: (count: number) => number
@@ -164,6 +185,11 @@ export class QuestSession {
 
     const current = this.events.current
     if (current !== null) {
+      const puzzle = this.puzzleFor(current.sectionName)
+      // A puzzle event opens the puzzle instead of a dialog, and returns
+      // (`EventManager.cs:309`); its buttons only appear once it is solved.
+      if (puzzle !== null) return { kind: 'puzzle', puzzle }
+
       return {
         kind: 'event',
         name: current.sectionName,
@@ -185,6 +211,88 @@ export class QuestSession {
     }
 
     return { kind: 'board' }
+  }
+
+  /**
+   * The puzzle for an event, created on first sight and kept until solved.
+   *
+   * `Quest.puzzle` holds them so a player who steps away comes back to the
+   * same board rather than a fresh one.
+   */
+  private puzzleFor(name: string): ActivePuzzle | null {
+    const component = this.options.components.get(name)
+    if (!(component instanceof QuestPuzzle)) return null
+
+    let state = this.puzzles.get(name)
+    if (state === undefined) {
+      const built = this.createPuzzle(component)
+      if (built === null) {
+        this.warn(`Error: Unable to build the ${component.puzzleClass} puzzle: ${name}`)
+        return null
+      }
+      state = built
+      this.puzzles.set(name, state)
+    }
+
+    return {
+      name,
+      kind: component.puzzleClass as ActivePuzzle['kind'],
+      state,
+      solved: state.solved(),
+    }
+  }
+
+  private createPuzzle(component: QuestPuzzle): PuzzleState | null {
+    const range = (min: number, max: number): number => min + this.random(max - min)
+    switch (component.puzzleClass) {
+      case 'code':
+        return PuzzleCode.create(
+          component.puzzleLevel,
+          component.puzzleAltLevel,
+          component.puzzleSolution,
+          range,
+        )
+      case 'image':
+        return PuzzleImage.generate(component.puzzleLevel, component.puzzleAltLevel, range)
+      case 'tower':
+        return PuzzleTower.generate(component.puzzleLevel, range)
+      case 'slide':
+        // The layouts are shipped data rather than generated, so a caller that
+        // has not supplied them gets nothing rather than an empty board.
+        return PuzzleSlide.generate(
+          component.puzzleLevel,
+          this.options.slideLayouts ?? new Map(),
+          range,
+        )
+      default:
+        return null
+    }
+  }
+
+  /**
+   * The player solved a puzzle and took the event's button.
+   *
+   * The state is discarded, so a scenario that opens the same puzzle again
+   * gets a fresh one — which is what `Finished` does in the C#.
+   */
+  finishPuzzle(name: string): void {
+    this.puzzles.delete(name)
+    this.pending = null
+    this.events.endEvent(0)
+    this.settle()
+  }
+
+  /**
+   * The player closed a puzzle without solving it.
+   *
+   * The state is kept, so they come back to the same board. The event is
+   * cleared rather than ended, because nothing has been chosen yet.
+   */
+  closePuzzle(): void {
+    this.pending = null
+    this.events.current = null
+    this.events.triggerEvent()
+    this.settle()
   }
 
   /** The player pressed a button. */

@@ -31,8 +31,16 @@ export interface PlayableSession {
     monster?: { monsterName: string }
     activation?: { effect: string; masterActions: string; move: string; ad: unknown }
     phase?: string
+    puzzle?: {
+      name: string
+      kind: 'slide' | 'code' | 'image' | 'tower'
+      state: unknown
+      solved: boolean
+    }
   }
   press: (index: number) => void
+  finishPuzzle: (name: string) => void
+  closePuzzle: () => void
   activate: (name: string) => void
   activationDone: () => void
   phaseAcknowledged: () => void
@@ -65,6 +73,19 @@ export interface PlayOptions {
   session: PlayableSession
   /** Where each board item's art comes from. */
   sources: SceneSources
+  /**
+   * Renders a puzzle into the overlay.
+   *
+   * Injected rather than imported so the four puzzle screens are only pulled
+   * in by an application that plays quests — a shell that only browses them
+   * does not need them.
+   */
+  onPuzzle?: (
+    puzzle: { name: string; kind: string; state: unknown; solved: boolean },
+    chrome: { moves: number; solved: boolean; onSolved: () => void; onGiveUp: () => void },
+    into: HTMLElement,
+    refresh: () => void,
+  ) => void
   /** Loads and crops an image; resolves to null when it is unavailable. */
   loadTexture?: (
     path: string,
@@ -192,6 +213,27 @@ export function playScreen(options: PlayOptions): PlayScreen {
         moveLabel: 'Move',
       })
       overlay.append(activation.element)
+      return
+    }
+
+    if (current.kind === 'puzzle' && current.puzzle !== undefined) {
+      const showing = current.puzzle
+      // The puzzle screens are given the state and told what to do with the
+      // result; they do not know about the session.
+      const chrome = {
+        moves: (showing.state as { moves?: number }).moves ?? 0,
+        solved: showing.solved,
+        onSolved: () => {
+          session.finishPuzzle(showing.name)
+          refresh()
+        },
+        onGiveUp: () => {
+          // Closing keeps the board, so the player returns to their progress.
+          session.closePuzzle()
+          refresh()
+        },
+      }
+      options.onPuzzle?.(showing, chrome, overlay, refresh)
       return
     }
 

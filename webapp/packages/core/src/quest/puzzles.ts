@@ -367,6 +367,38 @@ export class PuzzleSlide implements PuzzleState {
   puzzle: SlideBlock[] = []
   moves = 0
 
+  /**
+   * Picks a layout of the requested difficulty from the shipped set.
+   *
+   * `moves` is how many moves the layout takes to solve, and a quest asks for a
+   * difficulty rather than a specific puzzle. When none exists at that depth
+   * the C# steps down until one does — and calls `Application.Quit()` if it
+   * reaches zero, closing the game because a scenario asked for a puzzle that
+   * is not there. This returns null instead and leaves the caller to say so.
+   */
+  static generate(
+    depth: number,
+    layouts: ReadonlyMap<string, ContentFields>,
+    random: RandomRange,
+  ): PuzzleSlide | null {
+    let wanted = depth < 1 ? 1 : depth
+    while (wanted > 0) {
+      const options: ContentFields[] = []
+      for (const layout of layouts.values()) {
+        if (intOrZero(layout.get('moves')) === wanted) options.push(layout)
+      }
+      if (options.length > 0) {
+        const chosen = options[random(0, options.length)] ?? options[0]
+        if (chosen === undefined) return null
+        const puzzle = PuzzleSlide.fromSaved(chosen)
+        puzzle.moves = 0
+        return puzzle
+      }
+      wanted--
+    }
+    return null
+  }
+
   static fromSaved(data: ContentFields): PuzzleSlide {
     const puzzle = new PuzzleSlide()
     for (const [key, value] of data) {
