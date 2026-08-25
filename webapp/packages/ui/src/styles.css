@@ -646,3 +646,13 @@ body {
   margin: 0;
   font-variant-numeric: tabular-nums;
 }
+.vk-shell__url {
+  width: 100%;
+  font: inherit;
+  font-size: var(--vk-text-small);
+  padding: calc(var(--u) * 0.2);
+  border-radius: var(--vk-radius);
+  border: 1px solid var(--vk-border);
+  background: var(--vk-surface);
+  color: var(--vk-text);
+}

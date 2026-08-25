@@ -49,6 +49,7 @@ import type { ActivationView, AttackView, EventsView, MonsterInstance } from '@v
 import {
   canPickDirectory,
   canvasTextureEncoder,
+  FetchHttpClient,
   importFfgApp,
   isUnityAsset,
   MemoryFileSystem,
@@ -58,6 +59,7 @@ import {
   TextureCache,
 } from '@valkyrie/platform'
 import type { Crop, PickedDirectory, StorageManagerLike } from '@valkyrie/platform'
+import { acquireQuest } from './acquire.js'
 import { libraryPaths, startQuest, surveyLibrary } from './library.js'
 import { questArt } from './questArt.js'
 import { formatBytes, storageReport } from './storage.js'
@@ -124,6 +126,7 @@ function menu(): void {
           actions: [
             { label: rawText('Play a quest'), onPress: () => void library() },
             { label: rawText('Import game files'), onPress: importDemo },
+            { label: rawText('Add a scenario'), onPress: addScenario },
             { label: rawText('Browse quests'), onPress: quests },
             { label: rawText('Board renderer'), onPress: boardDemo },
             { label: rawText('Event dialog'), onPress: eventDemo },
@@ -362,6 +365,82 @@ function monsterDemo(): void {
     panel({
       class: 'vk-shell',
       children: [backTo(menu), dialog.element, status, label(rawText('Quest log')), entries],
+    }),
+  )
+}
+
+/**
+ * Downloading a scenario package into browser storage.
+ *
+ * Valkyrie's own quest browser reads an index the community publishes; that
+ * index is a separate piece of work. A URL is the honest interim: it is what
+ * the index would hand over anyway, and it works for a package hosted
+ * anywhere.
+ */
+function addScenario(): void {
+  const status = el('p', { class: 'vk-shell__status', attrs: { 'aria-live': 'polite' } })
+  const field = el('input', {
+    class: 'vk-shell__url',
+    attrs: {
+      type: 'url',
+      id: 'vk-quest-url',
+      placeholder: 'https://…/Scenario.valkyrie',
+      // The community packages live on GitHub; a full URL is what a player
+      // copies from a release page.
+      spellcheck: 'false',
+    },
+  })
+
+  const download = async (): Promise<void> => {
+    const url = field.value.trim()
+    if (url.length === 0) return
+    status.textContent = 'Downloading…'
+    try {
+      const fs = new OpfsFileSystem(navigator.storage as unknown as StorageManagerLike)
+      const paths = libraryPaths(
+        new StoragePaths({ appData: '/appdata', content: '/content', temp: '/tmp' }, 'MoM'),
+      )
+      const result = await acquireQuest(url, {
+        fs,
+        http: new FetchHttpClient(),
+        questRoot: paths.quests,
+        onProgress: (fraction, received) => {
+          status.textContent =
+            fraction > 0
+              ? `Downloading… ${Math.round(fraction * 100)}%`
+              : `Downloading… ${formatBytes(received)}`
+        },
+      })
+      status.textContent = `Added ${result.id}: ${String(result.files)} files, ${formatBytes(result.bytes)}.`
+    } catch (error) {
+      // The reason matters: a CORS refusal and a bad package look identical
+      // from the outside, and only one of them is the player's to fix.
+      status.textContent =
+        error instanceof Error ? `That did not work: ${error.message}` : 'That did not work.'
+    }
+  }
+
+  show(
+    panel({
+      class: 'vk-shell',
+      children: [
+        backTo(menu),
+        label(rawText('Add a scenario'), { size: 'large', heading: 1 }),
+        label(
+          rawText(
+            'Paste the address of a .valkyrie package. It is downloaded into this ' +
+              'browser and never leaves the device.',
+          ),
+        ),
+        el('label', { text: 'Package address', attrs: { for: 'vk-quest-url' } }),
+        field,
+        button(rawText('Download'), {
+          onPress: () => void download(),
+          variant: 'primary',
+          size: 'medium',
+        }),
+        status,
+      ],
     }),
   )
 }
