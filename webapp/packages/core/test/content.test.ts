@@ -14,7 +14,13 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { ContentData, makeTextureResolver } from '../src/content/ContentData.js'
 import { ContentLoader } from '../src/content/ContentLoader.js'
 import { parseContentPack } from '../src/content/ContentPack.js'
-import { combinePath, concatPath, headlessContext } from '../src/content/context.js'
+import {
+  combinePath,
+  concatPath,
+  headlessContext,
+  TEXTURE_EXTENSIONS,
+  WEB_TEXTURE_EXTENSIONS,
+} from '../src/content/context.js'
 import {
   CURRENT_QUEST_FORMAT,
   QuestFormatVersions,
@@ -710,5 +716,25 @@ describe('FormatVersions', () => {
     expect(requiresConversionKit('holymansion')).toBe(true)
     expect(requiresConversionKit('HOLYMANSION')).toBe(true)
     expect(requiresConversionKit('SomethingElse')).toBe(false)
+  })
+})
+
+describe('WEB_TEXTURE_EXTENSIONS', () => {
+  it('extends the C# list rather than replacing it', () => {
+    // TEXTURE_EXTENSIONS is the contract the content differential checks, so
+    // it must stay exactly as the C# has it.
+    expect(TEXTURE_EXTENSIONS).toEqual(['.dds', '.pvr', '.png', '.jpg', '.jpeg', '.tex'])
+    expect(WEB_TEXTURE_EXTENSIONS.slice(1)).toEqual([...TEXTURE_EXTENSIONS])
+  })
+
+  it('tries WebP first, which is what the importer writes', () => {
+    // Nothing in the C# list mentions WebP, so a resolver using it alone finds
+    // none of the imported art: 869 of 999 lookups against the real Mansions
+    // packs resolve only as .webp.
+    expect(WEB_TEXTURE_EXTENSIONS[0]).toBe('.webp')
+  })
+
+  it('still resolves the .png content shipped in the repository', () => {
+    expect([...WEB_TEXTURE_EXTENSIONS]).toContain('.png')
   })
 })

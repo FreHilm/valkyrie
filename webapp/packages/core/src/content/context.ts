@@ -45,6 +45,21 @@ export interface ContentContext {
 export const TEXTURE_EXTENSIONS = ['.dds', '.pvr', '.png', '.jpg', '.jpeg', '.tex'] as const
 
 /**
+ * What a web resolver should actually try.
+ *
+ * The port's importer writes WebP — a browser decodes it natively, where `.dds`
+ * would have to be decoded in JavaScript on every load. Nothing in the C# list
+ * mentions it, so a resolver using {@link TEXTURE_EXTENSIONS} alone finds none
+ * of the imported art: measured against the real Mansions packs, 869 of 999
+ * texture lookups resolve only as `.webp`.
+ *
+ * `TEXTURE_EXTENSIONS` stays exactly as the C# has it — it is the contract the
+ * content differential checks — and this list extends it rather than replacing
+ * it, so content shipped as `.png` in the repository still resolves.
+ */
+export const WEB_TEXTURE_EXTENSIONS = ['.webp', ...TEXTURE_EXTENSIONS] as const
+
+/**
  * The C# builds content paths two different ways, and the difference is
  * observable, so both are modelled rather than collapsed into one helper.
  *

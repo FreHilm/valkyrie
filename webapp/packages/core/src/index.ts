@@ -30,7 +30,13 @@ export { ContentLoader, DEFAULT_CONTENT_LOADERS } from './content/ContentLoader.
 export type { ContentTypeLoader, ContentLoaderOptions } from './content/ContentLoader.js'
 export { parseContentPack, CONTENT_PACK_INI } from './content/ContentPack.js'
 export type { ContentPack, ParsePackOptions } from './content/ContentPack.js'
-export { combinePath, concatPath, headlessContext, TEXTURE_EXTENSIONS } from './content/context.js'
+export {
+  combinePath,
+  concatPath,
+  headlessContext,
+  TEXTURE_EXTENSIONS,
+  WEB_TEXTURE_EXTENSIONS,
+} from './content/context.js'
 export type { ContentContext } from './content/context.js'
 export {
   CURRENT_QUEST_FORMAT,
