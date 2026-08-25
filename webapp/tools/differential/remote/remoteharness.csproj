@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>LatestMajor</RollForward>
+    <Nullable>disable</Nullable>
+    <AssemblyName>remoteharness</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>$(NoWarn);CS0414</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="RemoteContentPack.cs" />
+    <Compile Include="Shims.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+</Project>

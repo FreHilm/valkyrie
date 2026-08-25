@@ -1,0 +1,7 @@
+bin/
+obj/
+oggencoder/
+FSBExport.cs
+OggVorbisHeader.cs
+EndianBinaryReader.cs
+EndianType.cs

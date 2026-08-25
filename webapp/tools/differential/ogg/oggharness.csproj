@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RollForward>LatestMajor</RollForward>
+    <Nullable>disable</Nullable>
+    <AssemblyName>oggharness</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>$(NoWarn);CS0414;CS0108;CS0162;CS0219</NoWarn>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The vendored encoder, unmodified, straight out of the repo. -->
+    <Compile Include="oggencoder/**/*.cs" Exclude="oggencoder/Properties/AssemblyInfo.cs" />
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+</Project>
