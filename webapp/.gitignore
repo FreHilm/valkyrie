@@ -1,86 +1,82 @@
 node_modules/
 dist/
+dist-site/
 coverage/
 *.tsbuildinfo
-tools/differential/.work/
-tools/differential/cs/bin/
-tools/differential/cs/obj/
-tools/differential/cs/IniRead.cs
-tools/differential/i18n/.work/
-tools/differential/i18n/bin/
-tools/differential/i18n/obj/
-tools/differential/i18n/DictionaryI18n.cs
-tools/differential/i18n/StringKey.cs
-tools/differential/i18n/LocalizationRead.cs
-tools/differential/content/.work/
-tools/differential/content/bin/
-tools/differential/content/obj/
-tools/differential/content/ContentTypes.cs
-tools/differential/content/ContentData.cs
-tools/differential/content/ContentLoader.cs
-tools/differential/content/ContentPack.cs
-tools/differential/content/FormatVersions.cs
-tools/differential/content/IContent.cs
-tools/differential/content/ITestable.cs
-tools/differential/content/StringKey.cs
-tools/differential/content/DictionaryI18n.cs
-tools/differential/content/LocalizationRead.cs
-tools/differential/content/IniRead.cs
-tools/differential/quest/.work/
-tools/differential/quest/.sample/
-tools/differential/quest/bin/
-tools/differential/quest/obj/
-tools/differential/quest/QuestData.cs
-tools/differential/quest/QuestButtonData.cs
-tools/differential/quest/VarTests.cs
-tools/differential/quest/TextAlignment.cs
-tools/differential/quest/ContentTypes.cs
-tools/differential/quest/ContentData.cs
-tools/differential/quest/ContentLoader.cs
-tools/differential/quest/ContentPack.cs
-tools/differential/quest/FormatVersions.cs
-tools/differential/quest/IContent.cs
-tools/differential/quest/ITestable.cs
-tools/differential/quest/StringKey.cs
-tools/differential/quest/DictionaryI18n.cs
-tools/differential/quest/LocalizationRead.cs
-tools/differential/quest/IniRead.cs
-tools/differential/activation/.work/
-tools/differential/activation/bin/
-tools/differential/activation/obj/
-tools/differential/activation/Extracted.cs
-tools/differential/activation/Symbols.cs
-tools/differential/activation/StringKey.cs
-tools/differential/activation/DictionaryI18n.cs
-tools/differential/activation/LocalizationRead.cs
-tools/differential/attacks/.work/
-tools/differential/attacks/bin/
-tools/differential/attacks/obj/
-tools/differential/attacks/Extracted.cs
-tools/differential/monstertext/.work/
-tools/differential/monstertext/bin/
-tools/differential/monstertext/obj/
-tools/differential/monstertext/InvestigatorEvade.cs
-tools/differential/monstertext/HorrorCheck.cs
-tools/differential/rounds/.work/
-tools/differential/rounds/bin/
-tools/differential/rounds/obj/
-tools/differential/rounds/Extracted.cs
-tools/differential/rounds/RoundController.cs
-tools/differential/rounds/RoundControllerMoM.cs
-tools/differential/rounds/VarManager.cs
-tools/differential/rounds/VarTests.cs
-tools/differential/rules/.work/
-tools/differential/rules/bin/
-tools/differential/rules/obj/
-tools/differential/rules/VarManager.cs
-tools/differential/rules/VarTests.cs
-tools/differential/rules/PuzzleCode.cs
-tools/differential/rules/PuzzleImage.cs
-tools/differential/rules/PuzzleSlide.cs
-tools/differential/rules/PuzzleTower.cs
-tools/differential/rules/Puzzle.cs
-tools/differential/rules/IniRead.cs
+*.log
 
-# Vite output
-dist-site/
+# ---- Imported game content -------------------------------------------------
+#
+# Nothing extracted from a licensed Descent or Mansions of Madness install is
+# ours to redistribute. The import pipeline writes to
+# ~/.cache/valkyrie-web-port/, outside the repository entirely; this is the
+# backstop for an import pointed here by mistake.
+#
+# Safe to match by extension *here* in a way it is not at the repository root:
+# none of these formats has any business under webapp/, and none is tracked.
+# Textures. The importer writes .webp, but falls back to .png when the host
+# cannot encode WebP (ffgImport.ts:429), so both have to be covered.
+*.dds
+*.pvr
+*.ktx
+*.astc
+*.webp
+*.png
+*.jpg
+*.jpeg
+# Authored artwork gets one obvious home, exempt from the rule above. Anything
+# imported has no business here, and anything here has to be put there on
+# purpose.
+!packages/app/icons/
+!packages/app/icons/**
+# Audio
+*.fsb
+*.bank
+*.ogg
+*.wav
+*.mp3
+# Unity containers
+*.assets
+*.assets.resS
+*.resS
+*.resource
+*.bundle
+*.unity3d
+*.sharedAssets
+# Game text assets, localisation dumps and content packs. The import cache
+# holds 671 .txt and 105 .ini files pulled straight out of the install; none of
+# those formats is tracked under webapp/, so ignoring them wholesale costs
+# nothing and catches an import that lands here by mistake.
+*.txt
+*.ini
+*.zip
+Localization_*.txt
+*.valkyrie
+# Anywhere an import might land
+ffg/
+.cache/
+**/imported/
+
+# ---- Differential harness working files ------------------------------------
+#
+# Wildcards rather than a list per harness: the list had to be extended by hand
+# every time a harness was added, and forgetting was silent.
+tools/differential/.work/
+tools/differential/*/.work/
+tools/differential/*/bin/
+tools/differential/*/obj/
+
+# Every C# file under the harnesses is a copy of a Unity source unless it is
+# one of ours, so they are ignored by default and the handful we wrote are
+# named back in. This fails safe: a newly copied source needs no new rule, and
+# forgetting one cannot quietly duplicate upstream's code into this tree.
+tools/differential/**/*.cs
+!tools/differential/**/Shims.cs
+!tools/differential/**/Program.cs
+!tools/differential/**/Probe.cs
+!tools/differential/**/ValkyrieDebugShim.cs
+!tools/differential/**/SetVersionProbe.cs
+
+# ---- FFG import probe -------------------------------------------------------
+tools/ffg/probe/bin/
+tools/ffg/probe/obj/

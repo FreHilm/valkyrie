@@ -38,6 +38,9 @@ for f in VarManager VarTests PuzzleCode PuzzleImage PuzzleSlide PuzzleTower Puzz
   cp "$REPO/unity/Assets/Scripts/Quest/$f.cs" "$HERE/rules/$f.cs"
 done
 cp "$REPO/libraries/ValkyrieTools/IniRead.cs" "$HERE/rules/IniRead.cs"
+# Copied rather than tracked: an unmodified duplicate of an upstream source in
+# this tree can only drift out of step with it.
+cp "$REPO/unity/Assets/Scripts/VersionManager.cs" "$HERE/rules/VersionManager.cs"
 
 echo "==> building C# harness"
 dotnet build "$HERE/cs/harness.csproj" -v q --nologo >/dev/null
