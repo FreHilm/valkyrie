@@ -1,0 +1,26 @@
+{
+  "name": "@valkyrie/app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The shipped web application: shell, service worker and storage management.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@valkyrie/core": "*",
+    "@valkyrie/platform": "*",
+    "@valkyrie/ui": "*"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "dev": "node run.mjs",
+    "build:site": "node run.mjs build",
+    "preview": "node run.mjs preview"
+  }
+}

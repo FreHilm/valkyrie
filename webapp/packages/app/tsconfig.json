@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+    "types": []
+  },
+  "include": ["src/**/*.ts"],
+  "references": [{ "path": "../core" }, { "path": "../platform" }, { "path": "../ui" }]
+}
