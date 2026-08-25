@@ -174,6 +174,8 @@ export type {
   HeroInstance,
 } from './quest/QuestRuntime.js'
 
+export { QuestSession } from './quest/QuestSession.js'
+export type { SessionButton, SessionOptions, SessionView } from './quest/QuestSession.js'
 export {
   bundleQuest,
   questActivations,
