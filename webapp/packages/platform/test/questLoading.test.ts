@@ -9,6 +9,7 @@
 
 import { describe, expect, it } from 'vitest'
 
+import { Localization } from '@valkyrie/core'
 import { MemoryFileSystem } from '../src/filesystem.js'
 import { loadContent, loadQuest, textureResolver } from '../src/questLoading.js'
 
@@ -241,3 +242,95 @@ async function tokenType() {
   const { TokenData } = await import('@valkyrie/core')
   return TokenData
 }
+
+describe('localization', () => {
+  const LOCALIZED_PACK = `[ContentPack]
+name=Base
+id=Base
+type=MoM
+
+[ContentPackData]
+monsters.ini
+
+[LanguageData]
+ffg Localization.ffg.txt
+`
+  const FFG_TEXT = `.,English
+MONSTER_ZOMBIE,Zombie
+`
+
+  async function localizedTree(): Promise<MemoryFileSystem> {
+    return tree({
+      '/content/base/content_pack.ini': LOCALIZED_PACK,
+      '/content/base/monsters.ini': '[MonsterZombie]\ntraits=undead\n',
+      '/content/base/Localization.ffg.txt': FFG_TEXT,
+      '/text/Localization.English.txt': '.,English\nMENU_PLAY,Play\n',
+      '/quests/one/quest.ini':
+        '[Quest]\nname={qst:quest.name}\ntype=MoM\n\n[QuestText]\nLocalization.txt\n',
+      '/quests/one/Localization.txt': '.,English\nquest.name,The Fall\n',
+    })
+  }
+
+  it('registers a pack dictionary from [LanguageData]', async () => {
+    const loaded = await loadContent(await localizedTree(), {
+      root: '/content',
+      importPath: '/import',
+      localization: new Localization(),
+      gameType: 'MoM',
+    })
+
+    const ffg = loaded.context.localization.selectDictionary('ffg')
+    expect(ffg?.getValue('MONSTER_ZOMBIE')).toBe('Zombie')
+  })
+
+  it("registers Valkyrie's own text as the val dictionary", async () => {
+    const loaded = await loadContent(await localizedTree(), {
+      root: '/content',
+      importPath: '/import',
+      localization: new Localization(),
+      uiText: '/text',
+      gameType: 'MoM',
+    })
+
+    expect(loaded.context.localization.selectDictionary('val')?.getValue('MENU_PLAY')).toBe('Play')
+  })
+
+  it("registers the scenario's own text as the qst dictionary", async () => {
+    const fs = await localizedTree()
+    const loaded = await loadContent(fs, {
+      root: '/content',
+      importPath: '/import',
+      localization: new Localization(),
+      gameType: 'MoM',
+    })
+    await loadQuest(fs, '/quests/one', loaded.context.localization)
+
+    expect(loaded.context.localization.selectDictionary('qst')?.getValue('quest.name')).toBe(
+      'The Fall',
+    )
+  })
+
+  it('replaces the qst dictionary rather than merging scenarios', async () => {
+    // QuestData.cs:129 removes it first. Merging leaves the previous
+    // scenario's keys answering lookups the new one never defined.
+    const fs = await localizedTree()
+    await fs.writeText(
+      '/quests/two/quest.ini',
+      '[Quest]\nname=Two\ntype=MoM\n\n[QuestText]\nLocalization.txt\n',
+    )
+    await fs.writeText('/quests/two/Localization.txt', '.,English\nother.name,Two\n')
+    const loaded = await loadContent(fs, {
+      root: '/content',
+      importPath: '/import',
+      localization: new Localization(),
+      gameType: 'MoM',
+    })
+
+    await loadQuest(fs, '/quests/one', loaded.context.localization)
+    await loadQuest(fs, '/quests/two', loaded.context.localization)
+
+    const qst = loaded.context.localization.selectDictionary('qst')
+    expect(qst?.getValue('other.name')).toBe('Two')
+    expect(qst?.keyExists('quest.name')).toBe(false)
+  })
+})

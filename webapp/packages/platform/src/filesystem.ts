@@ -289,6 +289,11 @@ export class StoragePaths {
     return combine(this.gameTypePath, 'import')
   }
 
+  /** Valkyrie's own UI text. `Game.cs:285` reads `<content>/../text`. */
+  get uiTextPath(): string {
+    return combine(dirname(this.layout.content), 'text')
+  }
+
   get downloadPath(): string {
     return combine(this.layout.appData, 'Download')
   }

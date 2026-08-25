@@ -37,6 +37,8 @@ export interface LibraryPaths {
   quests: string
   /** Where FFG-imported assets landed. */
   imported: string
+  /** Directory holding Valkyrie's own `Localization*.txt`. */
+  uiText: string
 }
 
 export function libraryPaths(paths: StoragePaths): LibraryPaths {
@@ -44,6 +46,7 @@ export function libraryPaths(paths: StoragePaths): LibraryPaths {
     content: paths.contentPath,
     quests: paths.downloadPath,
     imported: paths.importPath,
+    uiText: paths.uiTextPath,
   }
 }
 
@@ -114,15 +117,20 @@ export async function startQuest(
   questPath: string,
   options: { gameType?: 'MoM' | 'D2E'; android?: boolean } = {},
 ): Promise<StartedQuest> {
-  const quest = await loadQuest(fs, questPath)
-  const gameType = options.gameType ?? (quest.quest.type === 'D2E' ? 'D2E' : 'MoM')
+  // Content first, quest second: both register dictionaries, and the
+  // scenario's own text has to win where a key collides.
+  const gameType =
+    options.gameType ?? ((await loadQuest(fs, questPath)).quest.type === 'D2E' ? 'D2E' : 'MoM')
 
   const content = await loadContent(fs, {
     root: paths.content,
     importPath: paths.imported,
+    uiText: paths.uiText,
     gameType,
     ...(options.android === undefined ? {} : { android: options.android }),
   })
+
+  const quest = await loadQuest(fs, questPath, content.context.localization)
 
   const { MonsterData: Monsters, ActivationData: Activations } = await import('@valkyrie/core')
   const contentMonsters = new Map<

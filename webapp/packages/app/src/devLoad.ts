@@ -17,6 +17,8 @@ export interface DevManifest {
   available: boolean
   /** Valkyrie's own content packs, without which a quest has nothing to play with. */
   content: { path: string; size: number }[]
+  /** Valkyrie's own `Localization*.txt`, which become the `val` dictionary. */
+  uiText?: { path: string; size: number }[]
   imported: { path: string; size: number }[]
   quests: { id: string; files: { path: string; size: number }[] }[]
 }
@@ -24,6 +26,8 @@ export interface DevManifest {
 export interface DevLoadTargets {
   /** Where content packs belong. */
   contentRoot: string
+  /** Where Valkyrie's own UI text belongs. */
+  uiTextRoot: string
   /** Where imported assets belong. */
   importPath: string
   /** Where extracted scenarios belong. */
@@ -68,6 +72,13 @@ export async function loadFromDevServer(
       size: entry.size,
     })
   }
+  for (const entry of manifest.uiText ?? []) {
+    jobs.push({
+      from: `text/${entry.path}`,
+      to: `${targets.uiTextRoot}/${entry.path}`,
+      size: entry.size,
+    })
+  }
   for (const entry of manifest.imported) {
     jobs.push({
       from: `ffg/MoM-import/import/${entry.path}`,
@@ -92,7 +103,9 @@ export async function loadFromDevServer(
     // are fetched through their own route.
     const url = job.from.startsWith('content/')
       ? `/local/content?path=${encodeURIComponent(job.from.slice('content/'.length))}`
-      : `/local/file?path=${encodeURIComponent(job.from)}`
+      : job.from.startsWith('text/')
+        ? `/local/text?path=${encodeURIComponent(job.from.slice('text/'.length))}`
+        : `/local/file?path=${encodeURIComponent(job.from)}`
     const response = await fetch(url)
     if (response.ok) {
       const data = new Uint8Array(await response.arrayBuffer())

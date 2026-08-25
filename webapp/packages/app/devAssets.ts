@@ -29,6 +29,8 @@ const CONTENT = join(
   'StreamingAssets',
   'content',
 )
+/** Valkyrie's own UI text, which becomes the `val` dictionary. */
+const UI_TEXT = join(CONTENT, '..', 'text')
 
 interface Entry {
   path: string
@@ -65,7 +67,12 @@ export function devAssets(): Plugin {
         const content = join(CONTENT, 'MoM')
         const body = JSON.stringify({
           available: existsSync(imported),
-          content: walk(content).filter((e) => e.path.endsWith('.ini') || isArt(e.path)),
+          // .txt matters as much as .ini: it is where a pack's `[LanguageData]`
+          // points, and without it every name renders as its raw {ffg:KEY}.
+          content: walk(content).filter(
+            (e) => e.path.endsWith('.ini') || e.path.endsWith('.txt') || isArt(e.path),
+          ),
+          uiText: walk(UI_TEXT).filter((e) => /^Localization[^/]*\.txt$/.test(e.path)),
           imported: walk(imported),
           quests: readdirSync(quests, { withFileTypes: true })
             .filter((e) => e.isDirectory())
@@ -73,6 +80,18 @@ export function devAssets(): Plugin {
         })
         response.setHeader('content-type', 'application/json')
         response.end(body)
+      })
+
+      server.middlewares.use('/local/text', (request, response) => {
+        const url = new URL(request.url ?? '', 'http://localhost')
+        const full = join(UI_TEXT, url.searchParams.get('path') ?? '')
+        if (!full.startsWith(join(UI_TEXT)) || !existsSync(full) || statSync(full).isDirectory()) {
+          response.statusCode = 404
+          response.end('not found')
+          return
+        }
+        response.setHeader('content-type', 'application/octet-stream')
+        createReadStream(full).pipe(response)
       })
 
       server.middlewares.use('/local/content', (request, response) => {

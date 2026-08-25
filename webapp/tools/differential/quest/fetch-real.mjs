@@ -72,8 +72,10 @@ for (const game of ['D2E', 'MoM']) {
         const response = await fetch(file.download_url)
         if (!response.ok) continue
         writeFileSync(archive, Buffer.from(await response.arrayBuffer()))
-        // Only the ini files matter; images and audio are not parsed here.
-        execFileSync('unzip', ['-o', '-j', archive, '*.ini', '-d', target], { stdio: 'ignore' })
+        // Everything, not just the inis: the app plays these packages, and a
+        // scenario without its Localization.*.txt renders every line of its
+        // own text as a raw key.
+        execFileSync('unzip', ['-o', archive, '-d', target], { stdio: 'ignore' })
         packages++
       } catch {
         // A scenario that will not download is simply skipped.

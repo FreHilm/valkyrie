@@ -13,6 +13,7 @@ import {
   ContentData,
   ContentLoader,
   defaultLocalization,
+  DictionaryI18n,
   loadQuestSections,
   Quest,
   readFromString,
@@ -40,6 +41,11 @@ export interface ContentOptions {
   importPath: string
   gameType: 'MoM' | 'D2E'
   localization?: Localization
+  /**
+   * Directory holding Valkyrie's own `Localization*.txt`, which become the
+   * `val` dictionary. `Game.cs:285` reads it from `<content>/../text`.
+   */
+  uiText?: string
   /** Halves the tile scale, as the C# does where texture memory is tight. */
   android?: boolean
 }
@@ -61,9 +67,22 @@ export async function loadContent(fs: FileSystem, options: ContentOptions): Prom
   const content = new ContentData(context)
   const loader = new ContentLoader(content, context)
 
+  if (options.uiText !== undefined) {
+    context.localization.addDictionary(
+      'val',
+      await readDictionary(fs, await uiTextFiles(fs, options.uiText)),
+    )
+  }
+
   const packs = await findPacks(fs, options.root)
   for (const packDir of packs) {
-    for (const name of await declaredFiles(fs, packDir)) {
+    const manifest = await packManifest(fs, packDir)
+    // Before the inis, not after: a `{dict:KEY}` value resolves against
+    // whatever is registered as it is parsed. `ContentLoader.cs:95`.
+    for (const [id, files] of manifest.localization) {
+      context.localization.addDictionary(id, await readDictionary(fs, files))
+    }
+    for (const name of manifest.files) {
       const path = combine(packDir, name)
       if (!(await fs.exists(path))) continue
       loader.loadIni(readFromString(await fs.readText(path)), packDir, packDir)
@@ -88,9 +107,17 @@ async function findPacks(fs: FileSystem, root: string): Promise<string[]> {
   return found
 }
 
-/** `content_pack.ini` first, then whatever `[ContentPackData]` names. */
-async function declaredFiles(fs: FileSystem, packDir: string): Promise<string[]> {
+interface PackManifest {
+  /** `content_pack.ini` first, then whatever `[ContentPackData]` names. */
+  files: string[]
+  /** Dictionary id to the files it is built from, from `[LanguageData]`. */
+  localization: Map<string, string[]>
+}
+
+/** Reads the two sections of `content_pack.ini` that name other files. */
+async function packManifest(fs: FileSystem, packDir: string): Promise<PackManifest> {
   const files = [PACK_INI]
+  const localization = new Map<string, string[]>()
   let section = ''
   for (const raw of await fs.readLines(combine(packDir, PACK_INI))) {
     const line = raw.trim()
@@ -98,11 +125,40 @@ async function declaredFiles(fs: FileSystem, packDir: string): Promise<string[]>
       section = line.replace(/^\[|\]$/g, '')
       continue
     }
-    if (section !== 'ContentPackData' || line.length === 0 || line.startsWith('#')) continue
+    if (line.length === 0 || line.startsWith('#')) continue
     const key = line.includes('=') ? line.slice(0, line.indexOf('=')).trim() : line
-    if (key.length > 0) files.push(key)
+    if (key.length === 0) continue
+    if (section === 'ContentPackData') files.push(key)
+    // Keys are "<dictId> <relative file>".
+    if (section === 'LanguageData') {
+      const space = key.indexOf(' ')
+      if (space === -1) continue
+      const id = key.slice(0, space)
+      const entry = localization.get(id)
+      const path = combine(packDir, key.slice(space + 1))
+      if (entry === undefined) localization.set(id, [path])
+      else entry.push(path)
+    }
   }
-  return files
+  return { files, localization }
+}
+
+/** Builds one dictionary from however many files feed it. */
+async function readDictionary(fs: FileSystem, files: readonly string[]): Promise<DictionaryI18n> {
+  const dict = new DictionaryI18n()
+  for (const file of files) {
+    if (!(await fs.exists(file))) continue
+    dict.addData(await fs.readLines(file))
+  }
+  return dict
+}
+
+/** Every `Localization*.txt` in a directory, or nothing when it is absent. */
+async function uiTextFiles(fs: FileSystem, dir: string): Promise<string[]> {
+  if (!(await fs.exists(dir))) return []
+  return (await fs.list(dir))
+    .filter((e) => e.kind !== 'directory' && /\/Localization[^/]*\.txt$/.test(e.path))
+    .map((e) => e.path)
 }
 
 function contentContext(
@@ -137,7 +193,11 @@ export interface LoadedQuest {
  * every `.ini` beside it — a scenario that forgets to declare a file still
  * works in the game, so it has to work here.
  */
-export async function loadQuest(fs: FileSystem, dir: string): Promise<LoadedQuest> {
+export async function loadQuest(
+  fs: FileSystem,
+  dir: string,
+  localization: Localization = defaultLocalization,
+): Promise<LoadedQuest> {
   const questIni = readFromString(await fs.readText(combine(dir, 'quest.ini')))
   const quest = new Quest(dir, questIni.data.get('Quest') ?? new Map())
 
@@ -154,7 +214,28 @@ export async function loadQuest(fs: FileSystem, dir: string): Promise<LoadedQues
     )
   }
 
+  await addQuestText(fs, dir, questIni.data.get('QuestText'), localization)
+
   return { quest, components, path: dir }
+}
+
+/**
+ * Registers the scenario's own text as the `qst` dictionary.
+ *
+ * Removed first, as `QuestData.cs:129` does: the dictionary is per-scenario,
+ * and merging the last one into the next leaves stale keys answering lookups.
+ */
+async function addQuestText(
+  fs: FileSystem,
+  dir: string,
+  section: Map<string, string> | undefined,
+  localization: Localization,
+): Promise<void> {
+  const files = [...(section?.keys() ?? [])]
+    .filter((name) => name.length > 0)
+    .map((name) => combine(dir, name))
+  localization.removeDictionary('qst')
+  localization.addDictionary('qst', await readDictionary(fs, files))
 }
 
 /**
