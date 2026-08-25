@@ -1,0 +1,120 @@
+name: Web port
+description: |
+  Builds and tests the TypeScript web port in `webapp/`.
+
+  Runs only when files under `webapp/` change, so it does not interfere with
+  the Unity build and validation workflows.
+run-name: Web port checks triggered by ${{ github.actor }}
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'webapp/**'
+      - '.github/workflows/webPort.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'webapp/**'
+      - '.github/workflows/webPort.yml'
+  workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: webapp
+
+jobs:
+  Test:
+    name: Typecheck and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check formatting
+        run: npm run format:check
+
+      - name: Test with coverage
+        run: npx vitest run --coverage
+
+      # Fails if a C# test file has no recorded disposition, so a suite added
+      # upstream cannot slip past the conformance accounting.
+      - name: Conformance ledger
+        run: node tools/conformance/ledger.mjs ..
+
+  Differential:
+    name: Differential test against the C# implementation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install
+        run: npm ci
+
+      # Compares the ported code against the real C# sources over generated
+      # corpora, every .ini and Localization.*.txt file shipped in
+      # StreamingAssets, and the vendored Ogg encoder. Fails if the two ever
+      # disagree on an input both can parse. Eight harnesses run; each prints
+      # its own "real divergences" count.
+      #
+      # `pipefail` matters: run.sh is `set -e` and the newer harnesses signal
+      # divergence by exit code, which piping into tee would otherwise swallow.
+      - name: Run differential harness
+        shell: bash
+        run: |
+          set -o pipefail
+          ./tools/differential/run.sh 8000 | tee result.txt
+
+      # Belt and braces: the older harnesses report through run.sh rather than
+      # by exit code, so their counts are checked textually as well. Both line
+      # shapes are matched — "real divergences: N" and "N real divergences".
+      # "<-- BUG" is matched too: it marks a divergent class in the summary, so
+      # the check still bites if a long class list pushes the count line out of
+      # view.
+      - name: Fail on divergence
+        run: |
+          if grep -qE 'real divergences: [1-9]|[1-9][0-9]* real divergences|<-- BUG' result.txt; then
+            echo "::error::The TypeScript port diverged from the C# implementation."
+            grep -nE 'real divergences' result.txt
+            exit 1
+          fi
+          if ! grep -q 'ogg:' result.txt; then
+            echo "::error::The differential run did not reach the last harness."
+            exit 1
+          fi
+
+      - name: Check bundle size budget
+        run: |
+          npm run build
+          node tools/size/check.mjs

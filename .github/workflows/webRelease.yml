@@ -1,0 +1,202 @@
+name: Web release
+
+description: |
+  Builds, versions and publishes the web port.
+
+  Replaces what `buildAndOptionalRelease.yml` does for the Unity build, minus
+  everything that made that one slow and fragile: no Unity licence activation,
+  no per-platform runners, no Android signing.
+
+  The deploy step is inert until the app package lands with T-016 — there is
+  nothing to serve yet. It reports that plainly rather than failing, so the
+  pipeline is in place and exercised before it is needed.
+run-name: Web release from ${{ github.ref_name }} by ${{ github.actor }}
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'webapp/**'
+      - 'unity/Assets/Resources/version.txt'
+      - '.github/workflows/webRelease.yml'
+  pull_request:
+    branches: [master]
+    paths:
+      - 'webapp/**'
+      - 'unity/Assets/Resources/version.txt'
+      - '.github/workflows/webRelease.yml'
+  workflow_dispatch:
+    inputs:
+      redeploy_run_id:
+        description: >-
+          Rollback: the run ID of a previous successful build whose artifact
+          should be republished as-is. Leave empty for a normal build.
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  Build:
+    name: Build and version
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.redeploy_run_id == '' || github.event.inputs.redeploy_run_id == null }}
+    outputs:
+      version: ${{ steps.version.outputs.bundle }}
+      has_app: ${{ steps.app.outputs.present }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Install
+        working-directory: webapp
+        run: npm ci
+
+      # One version.txt stays the source of truth for both builds, so the
+      # in-app version display keeps matching the Unity one. Parsed by the
+      # ported SetVersion logic rather than a second implementation in shell.
+      - name: Derive version
+        id: version
+        working-directory: webapp
+        run: |
+          BUNDLE=$(npx --no-install tsx tools/version/print.mjs)
+          echo "bundle=$BUNDLE" >> "$GITHUB_OUTPUT"
+          echo "Building version $BUNDLE"
+
+      - name: Typecheck, lint and test
+        working-directory: webapp
+        run: |
+          npm run typecheck
+          npm run lint
+          npm run format:check
+          npx vitest run --coverage
+
+      - name: Conformance ledger
+        working-directory: webapp
+        run: node tools/conformance/ledger.mjs ..
+
+      - name: Check bundle size budget
+        working-directory: webapp
+        run: node tools/size/check.mjs
+
+      # T-016 adds packages/app. Until then there is no site to publish.
+      - name: Is there an app to publish?
+        id: app
+        working-directory: webapp
+        run: |
+          if [ -d packages/app ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No packages/app yet — deploy skipped. Lands with T-016."
+          fi
+
+      - name: Build the site
+        if: steps.app.outputs.present == 'true'
+        working-directory: webapp
+        env:
+          VALKYRIE_VERSION: ${{ steps.version.outputs.bundle }}
+        run: npm run build:site
+
+      - name: Upload the site
+        if: steps.app.outputs.present == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-${{ steps.version.outputs.bundle }}
+          path: webapp/packages/app/dist-site
+          retention-days: 90
+          if-no-files-found: error
+
+  # A pull request gets a downloadable build, not a public URL: publishing a
+  # fork's build to the project's own Pages site would let any contributor
+  # serve arbitrary content from the project's origin.
+  Preview:
+    name: Preview build
+    needs: Build
+    if: github.event_name == 'pull_request' && needs.Build.outputs.has_app == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Note where the preview is
+        run: |
+          echo "::notice::Preview built as artifact site-${{ needs.Build.outputs.version }}."
+
+  Deploy:
+    name: Deploy to GitHub Pages
+    needs: Build
+    if: github.event_name == 'push' && needs.Build.outputs.has_app == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Download the site
+        uses: actions/download-artifact@v4
+        with:
+          name: site-${{ needs.Build.outputs.version }}
+          path: site
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload to Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+  # Rollback without rebuilding: republish the artifact from an earlier run.
+  # The build is not repeated, so what goes back up is exactly what was
+  # serving before, not a fresh build of an old commit.
+  Rollback:
+    name: Republish a previous build
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.redeploy_run_id != '' && github.event.inputs.redeploy_run_id != null }}
+    permissions:
+      pages: write
+      id-token: write
+      actions: read
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Download the artifact from run ${{ github.event.inputs.redeploy_run_id }}
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ github.event.inputs.redeploy_run_id }}
+          github-token: ${{ github.token }}
+          pattern: site-*
+          merge-multiple: true
+          path: site
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload to Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy
+        id: deploy
+        uses: actions/deploy-pages@v4
