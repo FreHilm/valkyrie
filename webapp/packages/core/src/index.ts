@@ -174,6 +174,14 @@ export type {
   HeroInstance,
 } from './quest/QuestRuntime.js'
 
+export {
+  bundleQuest,
+  questActivations,
+  questComponentData,
+  questEvents,
+  questMonsterTypes,
+} from './quest/questAdapter.js'
+export type { QuestBundle } from './quest/questAdapter.js'
 export { attackTypes, randomAttack } from './quest/monsterAttacks.js'
 export type { AttackView, AttackableMonster } from './quest/monsterAttacks.js'
 export { pickMonsterText, customMonsterEvent } from './quest/monsterText.js'
