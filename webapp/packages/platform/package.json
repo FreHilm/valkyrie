@@ -1,0 +1,26 @@
+{
+  "name": "@valkyrie/platform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Host-facing layer: virtual filesystem, storage layout, archive handling.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    }
+  },
+  "dependencies": {
+    "@valkyrie/core": "*",
+    "fflate": "^0.8.2"
+  },
+  "scripts": {
+    "build": "tsc --build"
+  }
+}
