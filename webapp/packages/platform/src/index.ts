@@ -158,3 +158,6 @@ export { decompressLz4Block, Lz4Error } from './lz4.js'
 
 export { TextureCache } from './textures.js'
 export type { Crop, Texture, TextureCacheOptions, TextureReader } from './textures.js'
+
+export { loadContent, loadQuest, textureResolver } from './questLoading.js'
+export type { ContentOptions, LoadedContent, LoadedQuest } from './questLoading.js'
