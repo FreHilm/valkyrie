@@ -1,0 +1,424 @@
+/*
+ * Valkyrie UI foundation.
+ *
+ * Everything is sized in `--u`, the unit `units.ts` installs: the screen is 30
+ * units high, exactly as UIScaler.cs defines it, so ported screens can use the
+ * same numbers the C# does.
+ *
+ * Fonts: the Unity build renders ColumbusMT, Gara_Scenario_Desc and a Descent
+ * symbol font through TextMeshPro. Those are commercial faces and their
+ * licences do not obviously cover web embedding, so they are named here behind
+ * generic fallbacks rather than bundled. Confirm the licences before adding
+ * @font-face rules — see docs/ui-foundation.md.
+ */
+
+:root {
+  --u: 1.5rem;
+
+  --vk-ink: #17181b;
+  --vk-parchment: #ece7dc;
+  --vk-surface: #f6f3ec;
+  --vk-surface-raised: #ffffff;
+  --vk-rule: #cdc5b5;
+  --vk-text: #1d1e22;
+  --vk-text-soft: #55565c;
+  --vk-accent: #8a2f24;
+  --vk-accent-text: #ffffff;
+  --vk-danger: #8a2f24;
+  --vk-focus: #2f6f9e;
+
+  --vk-font-body: 'Columbus MT', Palatino, 'Palatino Linotype', Georgia, serif;
+  --vk-font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --vk-radius: calc(var(--u) * 0.12);
+  --vk-gap: calc(var(--u) * 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --vk-parchment: #17181b;
+    --vk-surface: #202127;
+    --vk-surface-raised: #282a31;
+    --vk-rule: #3a3d46;
+    --vk-text: #e6e3dc;
+    --vk-text-soft: #a3a09a;
+    --vk-accent: #c4574a;
+    --vk-accent-text: #17181b;
+    --vk-danger: #c4574a;
+    --vk-focus: #6aa9d8;
+  }
+}
+
+:root[data-theme='dark'] {
+  --vk-parchment: #17181b;
+  --vk-surface: #202127;
+  --vk-surface-raised: #282a31;
+  --vk-rule: #3a3d46;
+  --vk-text: #e6e3dc;
+  --vk-text-soft: #a3a09a;
+  --vk-accent: #c4574a;
+  --vk-accent-text: #17181b;
+  --vk-danger: #c4574a;
+  --vk-focus: #6aa9d8;
+}
+
+body {
+  background: var(--vk-parchment);
+  color: var(--vk-text);
+  font-family: var(--vk-font-body);
+  margin: 0;
+}
+
+.vk-text {
+  margin: 0;
+  line-height: 1.35;
+  color: var(--vk-text);
+  text-wrap: pretty;
+}
+.vk-text--large {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.vk-text--medium {
+  font-weight: 600;
+}
+
+/* Touch targets: 44px is the smallest reliably hittable control on a phone,
+   and 2 units can fall below that once the unit floor is in play. */
+.vk-button {
+  font-family: var(--vk-font-ui);
+  min-height: max(calc(var(--u) * 1.6), 44px);
+  padding: calc(var(--u) * 0.25) calc(var(--u) * 0.6);
+  border: 1px solid var(--vk-rule);
+  border-radius: var(--vk-radius);
+  background: var(--vk-surface-raised);
+  color: var(--vk-text);
+  cursor: pointer;
+  line-height: 1.2;
+}
+.vk-button:hover:not(:disabled) {
+  border-color: var(--vk-text-soft);
+}
+.vk-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.vk-button--primary {
+  background: var(--vk-accent);
+  color: var(--vk-accent-text);
+  border-color: transparent;
+}
+.vk-button--danger {
+  border-color: var(--vk-danger);
+  color: var(--vk-danger);
+}
+
+.vk-panel {
+  background: var(--vk-surface);
+  border: 1px solid var(--vk-rule);
+  border-radius: var(--vk-radius);
+  padding: var(--u);
+  display: flex;
+  flex-direction: column;
+  gap: var(--vk-gap);
+}
+
+.vk-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.15);
+  overflow-y: auto;
+  max-height: calc(var(--u) * 20);
+}
+.vk-list__row {
+  padding: calc(var(--u) * 0.3) calc(var(--u) * 0.5);
+  border-radius: var(--vk-radius);
+  background: var(--vk-surface-raised);
+  border: 1px solid transparent;
+}
+.vk-list__row--selectable {
+  cursor: pointer;
+  min-height: max(calc(var(--u) * 1.6), 44px);
+  display: flex;
+  align-items: center;
+}
+.vk-list__row--selectable:hover {
+  border-color: var(--vk-rule);
+}
+.vk-list__row[aria-selected='true'] {
+  border-color: var(--vk-accent);
+}
+.vk-list--empty {
+  padding: var(--u);
+  color: var(--vk-text-soft);
+}
+
+.vk-dialog {
+  background: var(--vk-surface);
+  color: var(--vk-text);
+  border: 1px solid var(--vk-rule);
+  border-radius: var(--vk-radius);
+  padding: var(--u);
+  max-width: min(90vw, calc(var(--u) * 30));
+  display: flex;
+  flex-direction: column;
+  gap: var(--vk-gap);
+}
+.vk-dialog::backdrop {
+  background: rgb(0 0 0 / 0.55);
+}
+
+.vk-search {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.2);
+}
+.vk-search__label {
+  font-family: var(--vk-font-ui);
+  font-size: calc(var(--u) * 0.75);
+  color: var(--vk-text-soft);
+}
+.vk-search__input {
+  font: inherit;
+  min-height: max(calc(var(--u) * 1.6), 44px);
+  padding: calc(var(--u) * 0.2) calc(var(--u) * 0.4);
+  border: 1px solid var(--vk-rule);
+  border-radius: var(--vk-radius);
+  background: var(--vk-surface-raised);
+  color: var(--vk-text);
+}
+
+.vk-selection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vk-gap);
+}
+.vk-filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vk-gap);
+}
+.vk-filters__group {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.2);
+}
+.vk-filters__name {
+  font-family: var(--vk-font-ui);
+  font-size: calc(var(--u) * 0.7);
+  color: var(--vk-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.vk-filters__traits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 0.25);
+}
+.vk-trait--excluded {
+  text-decoration: line-through;
+}
+.vk-results__count {
+  font-family: var(--vk-font-ui);
+  font-size: calc(var(--u) * 0.7);
+  color: var(--vk-text-soft);
+  margin: 0;
+}
+
+:where(button, [href], input, [tabindex]):focus-visible {
+  outline: 2px solid var(--vk-focus);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---- board ---- */
+.vk-board {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none; /* pan and pinch are handled here, not by the browser */
+  background: var(--vk-ink);
+  cursor: grab;
+}
+.vk-board:active {
+  cursor: grabbing;
+}
+
+/* ---- event dialog ---- */
+.vk-event {
+  gap: var(--vk-gap);
+  max-width: calc(var(--u) * 26);
+}
+.vk-event__text {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.4);
+}
+.vk-event__img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--vk-radius);
+}
+.vk-event__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 0.3);
+}
+
+/* ---- hero selection ---- */
+.vk-heroes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 5), 1fr));
+  gap: var(--vk-gap);
+}
+.vk-hero {
+  font: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 0.2);
+  padding: calc(var(--u) * 0.3);
+  background: var(--vk-surface-raised);
+  border: 2px solid var(--vk-rule);
+  border-radius: var(--vk-radius);
+  color: var(--vk-text);
+  cursor: pointer;
+  min-height: max(calc(var(--u) * 4), 44px);
+}
+.vk-hero--chosen {
+  border-color: var(--vk-accent);
+}
+.vk-hero__portrait {
+  width: 100%;
+  height: auto;
+  border-radius: var(--vk-radius);
+}
+.vk-hero__name {
+  text-align: center;
+}
+.vk-heroes__count {
+  font-family: var(--vk-font-ui);
+  color: var(--vk-text-soft);
+  margin: 0;
+}
+
+/* ---- menus and quest browsing ---- */
+.vk-menu {
+  max-width: calc(var(--u) * 16);
+  gap: calc(var(--u) * 0.4);
+}
+.vk-quest-details {
+  max-width: calc(var(--u) * 26);
+}
+.vk-quest-details__image {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--vk-radius);
+}
+.vk-quest-details__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 0.3);
+}
+
+/* Present to a screen reader, absent to the eye. Used where a number carries
+   its meaning from position — the health and damage counters. */
+.vk-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- monster activation ---- */
+.vk-activation {
+  max-width: calc(var(--u) * 26);
+  gap: calc(var(--u) * 0.4);
+}
+.vk-activation__portrait {
+  max-width: calc(var(--u) * 8);
+  height: auto;
+  align-self: center;
+  border-radius: var(--vk-radius);
+}
+.vk-activation__text {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.3);
+}
+.vk-activation__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 0.3);
+}
+.vk-activation__health {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.3);
+  font-variant-numeric: tabular-nums;
+}
+.vk-activation__hp,
+.vk-activation__damage {
+  min-width: calc(var(--u) * 1.2);
+  text-align: center;
+}
+.vk-shell__log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.2);
+  font-size: var(--vk-text-small);
+  color: var(--vk-muted);
+}
+
+/* ---- monster dialog ---- */
+.vk-monster {
+  max-width: calc(var(--u) * 26);
+  gap: calc(var(--u) * 0.4);
+}
+.vk-monster__portrait {
+  max-width: calc(var(--u) * 8);
+  height: auto;
+  align-self: center;
+  border-radius: var(--vk-radius);
+}
+.vk-monster__text {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.3);
+}
+.vk-monster__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 0.3);
+}
+.vk-monster__health {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.3);
+  font-variant-numeric: tabular-nums;
+}
+.vk-monster__hp,
+.vk-monster__damage {
+  min-width: calc(var(--u) * 1.2);
+  text-align: center;
+}

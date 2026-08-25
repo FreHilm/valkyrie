@@ -1,0 +1,22 @@
+{
+  "name": "@valkyrie/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "UI foundation: the unit system, components and trait filtering that replace unity/Assets/Scripts/UI.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./styles.css": "./src/styles.css"
+  },
+  "dependencies": {
+    "@valkyrie/core": "*"
+  },
+  "scripts": {
+    "build": "tsc --build"
+  }
+}
