@@ -33,14 +33,23 @@ export interface TextureCacheOptions {
    */
   createBitmap?: (blob: Blob, crop?: Crop) => Promise<Texture>
   /**
-   * How many decoded images to keep. A Mansions scenario has around twenty
-   * tiles and sixty tokens on the board at once, and each tile sheet is a few
-   * megabytes decoded, so this is a real bound rather than a formality.
+   * How much decoded image data to keep, in bytes.
+   *
+   * Counting images rather than bytes is not a bound at all: a Mansions tile
+   * is 2048x2048, which is 17 MB decoded, so a limit of 128 images permits
+   * over two gigabytes and the browser tab simply dies. Decoded size is what
+   * costs memory, so decoded size is what is capped.
    */
   limit?: number
 }
 
-const DEFAULT_LIMIT = 128
+/** 192 MB of decoded images: roughly a screen of tiles with room to spare. */
+const DEFAULT_LIMIT = 192 * 1024 * 1024
+
+/** RGBA, which is what a decoded bitmap costs however it was compressed. */
+function bytesOf(bitmap: Texture): number {
+  return bitmap.width * bitmap.height * 4
+}
 
 async function defaultCreateBitmap(blob: Blob, crop?: Crop): Promise<Texture> {
   if (crop === undefined) return createImageBitmap(blob)
@@ -65,6 +74,8 @@ export class TextureCache {
   private readonly pending = new Map<string, Promise<Texture | null>>()
   /** Paths already known to be missing, so a broken reference is asked once. */
   private readonly missing = new Set<string>()
+  /** Decoded bytes resident, which is what the limit bounds. */
+  private bytes = 0
 
   constructor(options: TextureCacheOptions) {
     this.read = options.read
@@ -131,11 +142,13 @@ export class TextureCache {
 
   private store(key: string, bitmap: Texture): void {
     this.cached.set(key, bitmap)
-    while (this.cached.size > this.limit) {
+    this.bytes += bytesOf(bitmap)
+    while (this.bytes > this.limit && this.cached.size > 1) {
       const oldest = this.cached.keys().next()
       if (oldest.done === true) break
       const evicted = this.cached.get(oldest.value)
       this.cached.delete(oldest.value)
+      if (evicted !== undefined) this.bytes -= bytesOf(evicted)
       // Decoded bitmaps hold memory outside the JS heap, so releasing them is
       // not something the collector will do on its own.
       evicted?.close?.()
@@ -147,11 +160,17 @@ export class TextureCache {
     return this.cached.size
   }
 
+  /** Decoded bytes resident. */
+  get resident(): number {
+    return this.bytes
+  }
+
   /** Releases everything, for a quest that has ended. */
   clear(): void {
     for (const bitmap of this.cached.values()) bitmap.close?.()
     this.cached.clear()
     this.missing.clear()
+    this.bytes = 0
   }
 }
 

@@ -64,7 +64,7 @@ import { acquireQuest } from './acquire.js'
 import { devManifest, loadFromDevServer } from './devLoad.js'
 import { browsableQuests, byRecency, fetchQuestIndex, packageUrl } from './questIndex.js'
 import { libraryPaths, startQuest, surveyLibrary } from './library.js'
-import { questArt } from './questArt.js'
+import { questArt, tileImages } from './questArt.js'
 import { formatBytes, storageReport } from './storage.js'
 import { persistenceMessage, requestPersistence } from './persistence.js'
 import { watchForUpdate } from './serviceWorker.js'
@@ -779,6 +779,11 @@ async function play(
   // again, which is what puts the tiles down.
   const sizes = new Map<string, { width: number; height: number }>()
 
+  // A tile cannot be placed until its image size is known, and the image is
+  // only fetched for tiles already placed. Learning the sizes first is what
+  // breaks that circle — without it no tile is ever drawn.
+  const prefetch = tileImages({ content, components, resolveTexture })
+
   const screen = playScreen({
     session,
     sources: questArt({
@@ -801,6 +806,17 @@ async function play(
   })
 
   show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
+
+  // Sequential: a quest can place twenty 2048x2048 tiles, and decoding them all
+  // at once is how a tab runs out of memory.
+  void (async () => {
+    for (const path of prefetch) {
+      const image = await textures.load(path)
+      if (image === null) continue
+      sizes.set(path, { width: image.width, height: image.height })
+      screen.refresh()
+    }
+  })()
 }
 
 /**

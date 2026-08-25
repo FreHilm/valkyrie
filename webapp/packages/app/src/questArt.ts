@@ -200,3 +200,28 @@ function monsterImage(
   if (monster === undefined) return null
   return monster.imagePlace.length > 0 ? monster.imagePlace : monster.image
 }
+
+/**
+ * Every tile image a quest might place, so their sizes can be learned up front.
+ *
+ * A tile's board size comes from its image's pixel size, and `questArt.tile`
+ * returns nothing until that is known — but the image is only fetched for
+ * items already in the scene. Left alone the two wait for each other and no
+ * tile is ever drawn. Fetching them ahead breaks the circle.
+ */
+export function tileImages(options: {
+  content: ContentData
+  components: ReadonlyMap<string, QuestComponent>
+  resolveTexture: (name: string) => string | null
+}): string[] {
+  const paths = new Set<string>()
+  for (const [, component] of options.components) {
+    if (!(component instanceof Tile)) continue
+    const side = options.content.tryGet(TileSideData, component.tileSideName)
+    const declared = component.customImage.length > 0 ? component.customImage : side?.image
+    if (declared === undefined) continue
+    const file = options.resolveTexture(declared)
+    if (file !== null) paths.add(file)
+  }
+  return [...paths]
+}

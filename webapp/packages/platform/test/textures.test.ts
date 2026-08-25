@@ -14,9 +14,11 @@ import { TextureCache } from '../src/textures.js'
 import type { Crop } from '../src/textures.js'
 
 /** A stand-in bitmap that records being closed. */
-function bitmap(label: string) {
+function bitmap(label: string, width = 1, height = 1) {
   return {
     label,
+    width,
+    height,
     closed: false,
     close(): void {
       this.closed = true
@@ -126,17 +128,33 @@ describe('TextureCache', () => {
   })
 
   describe('eviction', () => {
-    it('keeps only the configured number resident', async () => {
-      const { instance } = cache({ a: '1', b: '2', c: '3' }, { limit: 2 })
+    it('keeps only as much decoded data as the limit allows', async () => {
+      // Counting images is not a bound: a Mansions tile is 2048x2048, which is
+      // 17 MB decoded, so a limit of 128 images permits over two gigabytes and
+      // the tab dies.
+      const { instance } = cache({ a: '1', b: '2', c: '3' }, { limit: 8 })
       await instance.load('a')
       await instance.load('b')
       await instance.load('c')
 
+      expect(instance.resident).toBeLessThanOrEqual(8)
       expect(instance.size).toBe(2)
     })
 
+    it('evicts one big image where it would keep many small ones', async () => {
+      const big = new TextureCache({
+        read: async () => new Uint8Array([1]),
+        createBitmap: async () => bitmap('big', 64, 64),
+        limit: 64 * 64 * 4,
+      })
+      await big.load('a')
+      await big.load('b')
+
+      expect(big.size).toBe(1)
+    })
+
     it('evicts the least recently used, not the oldest loaded', async () => {
-      const { instance, decodes } = cache({ a: '1', b: '22', c: '333' }, { limit: 2 })
+      const { instance, decodes } = cache({ a: '1', b: '22', c: '333' }, { limit: 8 })
       await instance.load('a')
       await instance.load('b')
       await instance.load('a') // 'a' is now the most recent
@@ -151,8 +169,10 @@ describe('TextureCache', () => {
       const closed: unknown[] = []
       const instance = new TextureCache({
         read: async () => new Uint8Array([1]),
-        createBitmap: async () => ({ close: () => closed.push(1) }) as unknown as ImageBitmap,
-        limit: 1,
+        createBitmap: async () =>
+          ({ width: 1, height: 1, close: () => closed.push(1) }),
+        // One 1x1 bitmap is four bytes, so this holds exactly one.
+        limit: 4,
       })
       await instance.load('a')
       await instance.load('b')
@@ -164,7 +184,8 @@ describe('TextureCache', () => {
       const closed: unknown[] = []
       const instance = new TextureCache({
         read: async () => new Uint8Array([1]),
-        createBitmap: async () => ({ close: () => closed.push(1) }) as unknown as ImageBitmap,
+        createBitmap: async () =>
+          ({ width: 1, height: 1, close: () => closed.push(1) }),
       })
       await instance.load('a')
       await instance.load('b')
