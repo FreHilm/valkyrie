@@ -279,3 +279,102 @@ event1=
     expect(quest.view().kind).toBe('event')
   })
 })
+
+describe('spawning monsters', () => {
+  const withContent = (ini: string, contentMonsters: Map<string, unknown>) => {
+    const components = loadQuestSections(readFromString(ini), 'test.ini', {})
+    const built = new QuestSession({
+      bundle: bundleQuest(components),
+      components,
+      contentMonsters: contentMonsters as never,
+      random: () => 0,
+    })
+    built.runtime.heroes.push({ heroName: 'HeroAshcanPete', activated: false })
+    return built
+  }
+
+  const ZOMBIE = new Map([['MonsterZombie', { traits: ['undead'], activations: [] }]])
+
+  it('places a monster when a spawn event runs', () => {
+    const quest = withContent(
+      `[SpawnA]
+trigger=EventStart
+monster=MonsterZombie
+buttons=1
+event1=
+`,
+      ZOMBIE,
+    )
+    quest.start()
+
+    expect(quest.runtime.monsters.map((m) => m.monsterName)).toEqual(['MonsterZombie'])
+    expect(quest.runtime.vars.getValue('#monsters')).toBe(1)
+  })
+
+  it('records the spawn section a monster came from', () => {
+    const quest = withContent(
+      '[SpawnA]\ntrigger=EventStart\nmonster=MonsterZombie\nbuttons=1\nevent1=\n',
+      ZOMBIE,
+    )
+    quest.start()
+
+    expect(quest.runtime.monsters[0]?.spawnedBy).toBe('SpawnA')
+  })
+
+  it('resolves a spawn described by traits', () => {
+    const quest = withContent(
+      '[SpawnA]\ntrigger=EventStart\ntraits=undead\nbuttons=1\nevent1=\n',
+      ZOMBIE,
+    )
+    quest.start()
+
+    expect(quest.runtime.monsters.map((m) => m.monsterName)).toEqual(['MonsterZombie'])
+  })
+
+  it('warns rather than silently placing nothing when the type is unknown', () => {
+    const quest = withContent(
+      '[SpawnA]\ntrigger=EventStart\nmonster=MonsterNope\nbuttons=1\nevent1=\n',
+      ZOMBIE,
+    )
+    quest.start()
+
+    expect(quest.runtime.monsters).toHaveLength(0)
+    expect(quest.runtime.log.toArray().some((e) => e.entry.includes('Monster type unknown'))).toBe(
+      true,
+    )
+  })
+
+  it('gives a content monster its activations, so its turn is not skipped', () => {
+    // A type absent from the merged monsterTypes map draws no activations at
+    // all, which reads as "no activation data" and skips the monster's turn.
+    const quest = withContent(
+      '[SpawnA]\ntrigger=EventStart\nmonster=MonsterZombie\nbuttons=1\nevent1=\n',
+      new Map([['MonsterZombie', { traits: ['undead'], activations: ['Common'] }]]),
+    )
+    quest.start()
+    quest.investigatorsDone()
+
+    // No error about missing activation data.
+    expect(
+      quest.runtime.log.toArray().some((e) => e.entry.includes('Unable to find any activation')),
+    ).toBe(false)
+  })
+
+  it('lets a quest monster override a content monster of the same name', () => {
+    const quest = withContent(
+      `[SpawnA]
+trigger=EventStart
+monster=MonsterZombie
+buttons=1
+event1=
+[MonsterZombie]
+base=MonsterOther
+activation=Custom
+`,
+      ZOMBIE,
+    )
+    quest.start()
+
+    expect(quest.runtime.monsters.map((m) => m.monsterName)).toEqual(['MonsterZombie'])
+  })
+})

@@ -1,8 +1,8 @@
 {
   "@valkyrie/core": {
-    "raw": 228347,
-    "gzip": 71220,
-    "files": 34
+    "raw": 253867,
+    "gzip": 79002,
+    "files": 37
   },
   "@valkyrie/platform": {
     "raw": 195537,

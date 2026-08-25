@@ -16,12 +16,26 @@ import type { ActivationView } from './ActivationInstance.js'
 import { EventManager } from './EventManager.js'
 import { QuestRuntime } from './QuestRuntime.js'
 import type { MonsterInstance } from './QuestRuntime.js'
-import { MoMPhase, RoundControllerMoM } from './RoundController.js'
-import type { RoundRequest } from './RoundController.js'
+import { MoMPhase, RoundControllerMoM, roundToInt } from './RoundController.js'
+import { runtimeMonsterSelection } from './monsterSelection.js'
+import type { TraitedMonster } from './monsterSelection.js'
+
+/**
+ * A content monster, as both selection and activation need it.
+ *
+ * `traits` decides whether a trait-based spawn matches it; `activations` and
+ * the section name decide what it does on its turn. `MonsterData` supplies
+ * both, so the session takes one map rather than two that could disagree.
+ */
+export interface ContentMonsterView extends TraitedMonster {
+  sectionName?: string
+  activations?: readonly string[]
+}
+import type { MonsterTypeView, RoundRequest } from './RoundController.js'
 import type { QuestBundle } from './questAdapter.js'
 import { QuestButtonData } from './QuestButtonData.js'
 import type { QuestComponent } from './QuestComponent.js'
-import { QuestEvent } from './QuestComponent.js'
+import { QuestEvent, Spawn as QuestSpawn } from './QuestComponent.js'
 import { outputSymbolReplace } from './symbols.js'
 import type { Localization } from '../i18n/Localization.js'
 import { LogEntry } from './QuestLog.js'
@@ -48,6 +62,18 @@ export type SessionView =
 
 export interface SessionOptions {
   bundle: QuestBundle
+  /**
+   * Content monsters, in the order the content data yields them. Without them
+   * a spawn that names a content type — which is most of them — resolves to
+   * nothing and the scenario silently fights no one.
+   */
+  contentMonsters?: ReadonlyMap<string, ContentMonsterView>
+  /**
+   * Content `MonsterActivation` sections, keyed by section name. A monster
+   * whose type names none of its own draws from these; without them every
+   * activation fails and the monster phase does nothing.
+   */
+  contentActivations?: ReadonlyMap<string, ActivationView>
   /** The parsed components, for the text and buttons an event shows. */
   components: ReadonlyMap<string, QuestComponent>
   gameType?: 'MoM' | 'D2E'
@@ -64,14 +90,18 @@ export class QuestSession {
   readonly rounds: RoundControllerMoM
 
   private pending: RoundRequest | null = null
+  /** `Quest.monsterSelect`: what each spawn section resolved to. */
+  private readonly monsterSelect = new Map<string, string>()
   private readonly options: SessionOptions
   private readonly gameType: 'MoM' | 'D2E'
+  private readonly random: (count: number) => number
 
   constructor(options: SessionOptions) {
     this.options = options
     this.gameType = options.gameType ?? 'MoM'
 
     const random = options.random ?? ((count) => Math.floor(Math.random() * count))
+    this.random = random
     this.runtime = new QuestRuntime({
       components: options.bundle.components,
       events: options.bundle.events,
@@ -87,7 +117,9 @@ export class QuestSession {
       ...(options.playAudio === undefined ? {} : { playAudio: options.playAudio }),
       // Presentation is pulled through `view()` rather than pushed, so the
       // engine does not need to know a screen exists.
-      present: () => {},
+      present: (event) => {
+        this.placeSpawn(event.sectionName)
+      },
       rounds: {
         inMonsterPhase: () => this.rounds.inMonsterPhase(),
         monsterActivated: () => this.rounds.monsterActivated(),
@@ -97,8 +129,12 @@ export class QuestSession {
     this.rounds = new RoundControllerMoM({
       runtime: this.runtime,
       events: this.events,
-      monsterTypes: options.bundle.monsterTypes,
-      contentActivations: new Map(),
+      // Quest monsters and content monsters both need to be here: a spawn can
+      // resolve to either, and a type absent from this map draws no
+      // activations at all — which reads as "no activation data" and skips the
+      // monster's turn entirely.
+      monsterTypes: mergeMonsterTypes(options.bundle.monsterTypes, options.contentMonsters),
+      contentActivations: options.contentActivations ?? new Map(),
       questActivations: options.bundle.activations,
       random,
       present: (request) => {
@@ -234,7 +270,65 @@ export class QuestSession {
 
   /** Advances the round when the engine allows it. */
   endRound(): boolean {
-    return this.rounds.checkNewRound()
+    const advanced = this.rounds.checkNewRound()
+    this.settle()
+    return advanced
+  }
+
+  /**
+   * The players are finished with the horror phase.
+   *
+   * `RoundControllerMoM.checkNewRound` refuses to turn the round over in the
+   * horror phase while monsters remain, so that a random event cannot flip the
+   * game back to the investigators before the horror checks are taken. Asking
+   * explicitly is what lifts that.
+   */
+  endPhase(): boolean {
+    this.pending = null
+    this.rounds.endRound()
+    this.settle()
+    return this.endRound()
+  }
+
+  /**
+   * A `Spawn` event places its monster when it runs.
+   *
+   * The C# does this inside `TriggerEvent` (`EventManager.cs:236`): resolve the
+   * type, then add it — unless the game groups monsters and one of that type is
+   * already present, in which case a unique spawn promotes the existing group
+   * rather than adding a second.
+   */
+  private placeSpawn(name: string): void {
+    const spawn = this.options.bundle.spawns.get(name)
+    if (spawn === undefined) return
+
+    const resolved = runtimeMonsterSelection(name, this.options.bundle.spawns, {
+      contentMonsters: this.options.contentMonsters ?? new Map(),
+      questMonsters: this.options.bundle.customMonsters,
+      questComponents: new Set(this.options.components.keys()),
+      selected: this.monsterSelect,
+      onBoard: this.runtime.monsters.map((m) => m.monsterName),
+      gameType: this.gameType,
+      random: this.random,
+      log: this.runtime.log,
+    })
+    if (!resolved) {
+      this.warn(`Warning: Monster type unknown in event: ${name}`)
+      return
+    }
+
+    const type = this.monsterSelect.get(name)
+    if (type === undefined) return
+
+    const component = this.options.components.get(name)
+    const unique = component instanceof QuestSpawn && component.unique
+    const healthMod =
+      component instanceof QuestSpawn
+        ? roundToInt(
+            component.uniqueHealthBase + this.runtime.heroCount() * component.uniqueHealthHero,
+          )
+        : 0
+    this.runtime.spawnMonster(type, name, unique, healthMod)
   }
 
   private resolve(activation: ActivationView, monster: MonsterInstance): ActivationInstance {
@@ -302,4 +396,22 @@ export class QuestSession {
     )
     return outputSymbolReplace(raw, { vars: this.runtime.vars, gameType: this.gameType })
   }
+}
+
+/** Quest custom monsters over content monsters of the same name. */
+function mergeMonsterTypes(
+  questTypes: ReadonlyMap<string, MonsterTypeView>,
+  contentMonsters: ReadonlyMap<string, ContentMonsterView> | undefined,
+): Map<string, MonsterTypeView> {
+  const merged = new Map<string, MonsterTypeView>()
+  for (const [name, monster] of contentMonsters ?? []) {
+    merged.set(name, {
+      sectionName: monster.sectionName ?? name,
+      activations: monster.activations ?? [],
+    })
+  }
+  // A quest may redefine a content monster; its version wins, as the C#'s
+  // `qd.components` check runs before the content lookup.
+  for (const [name, type] of questTypes) merged.set(name, type)
+  return merged
 }

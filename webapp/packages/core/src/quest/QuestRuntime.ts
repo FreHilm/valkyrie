@@ -186,15 +186,29 @@ export class QuestRuntime {
    * Descent groups identical monsters into one entry; Mansions keeps them
    * separate. `#monsters` is kept in step, because scenarios test it.
    */
-  spawnMonster(monsterName: string, spawnedBy: string, unique = false): MonsterInstance | null {
+  spawnMonster(
+    monsterName: string,
+    spawnedBy: string,
+    unique = false,
+    uniqueHealthMod = 0,
+  ): MonsterInstance | null {
     const existing = this.monsters.find((m) => m.monsterName === monsterName)
-    if (this.monstersGrouped && existing !== undefined && !unique) return existing
+    if (this.monstersGrouped && existing !== undefined) {
+      // Descent groups identical monsters, so a unique spawn of a type already
+      // present *promotes that group to a master* — it does not add a second
+      // one. Adding one would put twice the monsters in front of the players.
+      if (unique) {
+        existing.unique = true
+        existing.health = uniqueHealthMod
+      }
+      return existing
+    }
 
     const monster: MonsterInstance = {
       monsterName,
       spawnedBy,
       unique,
-      health: 0,
+      health: unique ? uniqueHealthMod : 0,
       damage: 0,
       activated: false,
       minionStarted: false,

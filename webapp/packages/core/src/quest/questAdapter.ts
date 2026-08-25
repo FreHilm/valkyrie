@@ -22,9 +22,11 @@ import {
   QItem,
   QuestComponent,
   QuestEvent,
+  Spawn,
   Tile,
   Token,
 } from './QuestComponent.js'
+import type { CustomMonsterView, SpawnView } from './monsterSelection.js'
 
 /** `Activation` sections, keyed without the `Activation` prefix. */
 export function questActivations(
@@ -67,6 +69,18 @@ export function questMonsterTypes(
       derivedType: component.baseMonster,
       useMonsterTypeActivations: component.activations.length === 0,
     })
+  }
+  return result
+}
+
+/** `CustomMonster` sections, as monster selection sees them. */
+export function questCustomMonsters(
+  components: ReadonlyMap<string, QuestComponent>,
+): Map<string, CustomMonsterView> {
+  const result = new Map<string, CustomMonsterView>()
+  for (const [name, component] of components) {
+    if (!(component instanceof CustomMonster)) continue
+    result.set(name, { traits: component.traits, baseMonster: component.baseMonster })
   }
   return result
 }
@@ -124,19 +138,40 @@ export function questEvents(
   return result
 }
 
+/** `Spawn` sections, as monster selection sees them. */
+export function questSpawns(
+  components: ReadonlyMap<string, QuestComponent>,
+): Map<string, SpawnView> {
+  const result = new Map<string, SpawnView>()
+  for (const [name, component] of components) {
+    if (!(component instanceof Spawn)) continue
+    result.set(name, {
+      sectionName: name,
+      mTypes: component.mTypes,
+      mTraitsRequired: component.mTraitsRequired,
+      mTraitsPool: component.mTraitsPool,
+    })
+  }
+  return result
+}
+
 /** Everything the engine needs from a loaded quest, built in one pass. */
 export interface QuestBundle {
   events: Map<string, EventDefinition>
+  spawns: Map<string, SpawnView>
   components: Map<string, QuestComponentData>
   activations: Map<string, QuestActivation>
   monsterTypes: Map<string, MonsterTypeView>
+  customMonsters: Map<string, CustomMonsterView>
 }
 
 export function bundleQuest(components: ReadonlyMap<string, QuestComponent>): QuestBundle {
   return {
     events: questEvents(components),
+    spawns: questSpawns(components),
     components: questComponentData(components),
     activations: questActivations(components),
     monsterTypes: questMonsterTypes(components),
+    customMonsters: questCustomMonsters(components),
   }
 }

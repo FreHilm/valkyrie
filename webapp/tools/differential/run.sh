@@ -350,6 +350,14 @@ echo
 echo "==> quest editor round trip (needs downloaded scenarios)"
 (cd "$REPO/webapp" && npx --no-install tsx "$HERE/questwrite/compare.mjs")
 
+# ---- milestone -----------------------------------------------------------
+# Not a differential — there is no headless C# to compare against. It plays a
+# real published scenario from start to an ending and fails if the engine
+# stalls or warns, which is the thing no unit test can tell us.
+echo
+echo "==> playing a real scenario end to end (needs a downloaded quest)"
+(cd "$REPO/webapp" && npx --no-install tsx "$HERE/../milestone/play.mjs" | head -1)
+
 # ---- quest text symbols --------------------------------------------------
 # Every line of text a quest shows goes through OutputSymbolReplace, so it is
 # checked against the extracted C# rather than trusted.

@@ -179,12 +179,18 @@ describe('monsters', () => {
     expect(runtime.monsters).toHaveLength(2)
   })
 
-  it('never groups a unique monster', () => {
+  it('promotes rather than duplicates when a unique spawn repeats a type', () => {
+    // This test previously asserted two monsters, which was wrong.
+    // EventManager.cs:252 adds only when `!MonstersGrouped() || oldMonster ==
+    // null`; with grouping on and a match present it takes the `else if
+    // (unique)` branch and upgrades the group in place. Adding a second one
+    // would put twice the monsters in front of the players.
     const runtime = new QuestRuntime({ components: components(), monstersGrouped: true })
     runtime.spawnMonster('Shoggoth', 'A', true)
     runtime.spawnMonster('Shoggoth', 'B', true)
 
-    expect(runtime.monsters).toHaveLength(2)
+    expect(runtime.monsters).toHaveLength(1)
+    expect(runtime.monsters[0]?.unique).toBe(true)
   })
 
   it('updates #monsters when one is removed', () => {
@@ -320,5 +326,46 @@ describe('events driving the runtime', () => {
     manager.queue('Talk')
 
     expect(runtime.boardItems()).toEqual([])
+  })
+})
+
+describe('spawning into a grouped game (Descent)', () => {
+  const grouped = (): QuestRuntime =>
+    new QuestRuntime({ components: new Map(), monstersGrouped: true })
+
+  it('joins an existing group rather than adding a second', () => {
+    const runtime = grouped()
+    runtime.spawnMonster('MonsterZombie', 'SpawnA')
+    runtime.spawnMonster('MonsterZombie', 'SpawnB')
+
+    expect(runtime.monsters).toHaveLength(1)
+  })
+
+  it('promotes the existing group when the spawn is unique', () => {
+    // The C# upgrades oldMonster in place (EventManager.cs:263). Adding a
+    // second group instead would put twice the monsters on the board.
+    const runtime = grouped()
+    runtime.spawnMonster('MonsterZombie', 'SpawnA')
+    const promoted = runtime.spawnMonster('MonsterZombie', 'SpawnB', true, 3)
+
+    expect(runtime.monsters).toHaveLength(1)
+    expect(promoted?.unique).toBe(true)
+    expect(promoted?.health).toBe(3)
+  })
+
+  it('carries the health modifier onto a first unique spawn', () => {
+    const runtime = grouped()
+    const monster = runtime.spawnMonster('MonsterZombie', 'SpawnA', true, 5)
+
+    expect(monster?.unique).toBe(true)
+    expect(monster?.health).toBe(5)
+  })
+
+  it('keeps Mansions monsters separate, unique or not', () => {
+    const runtime = new QuestRuntime({ components: new Map(), monstersGrouped: false })
+    runtime.spawnMonster('MonsterZombie', 'SpawnA')
+    runtime.spawnMonster('MonsterZombie', 'SpawnB', true, 2)
+
+    expect(runtime.monsters).toHaveLength(2)
   })
 })
