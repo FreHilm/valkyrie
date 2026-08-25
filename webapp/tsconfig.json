@@ -1,0 +1,17 @@
+{
+  "files": [],
+  "references": [
+    {
+      "path": "./packages/core"
+    },
+    {
+      "path": "./packages/platform"
+    },
+    {
+      "path": "./packages/ui"
+    },
+    {
+      "path": "./packages/app"
+    }
+  ]
+}

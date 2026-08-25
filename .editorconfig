@@ -115,6 +115,10 @@ indent_size = 2
 [*.{yml,yaml}]
 indent_size = 2
 
+# TypeScript / JavaScript (web port)
+[*.{ts,mts,js,mjs}]
+indent_size = 2
+
 # Markdown files
 [*.md]
 trim_trailing_whitespace = false

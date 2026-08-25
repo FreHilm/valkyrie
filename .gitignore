@@ -22,3 +22,30 @@ unity/Assets/TextMesh Pro/Examples & Extras.meta
 /unity/ProjectSettings/PackageManagerSettings.asset
 /unity/.vsconfig
 /docs/superpowers/
+
+# Unity build output and logs. Stale copies of the first three were committed
+# and removed with T-022; they were local licensing failures, referenced by
+# nothing, and they leaked local filesystem paths.
+compile-check.log
+compile-results.log
+/unity/Logs/
+/unity/Library/
+/unity/Temp/
+/unity/Obj/
+/unity/Build/
+/unity/Builds/
+/unity/UserSettings/
+/unity/MemoryCaptures/
+/unity/Recordings/
+# Unity regenerates these in /unity/. Scoped rather than global: the C#
+# libraries under /libraries/ have real, tracked .csproj files, and so do the
+# differential harnesses under /webapp/tools/.
+/unity/*.csproj
+/unity/*.unityproj
+/unity/*.sln
+/unity/*.suo
+/unity/*.user
+/unity/*.userprefs
+/unity/*.pidb
+/unity/*.booproj
+/unity/sysinfo.txt
