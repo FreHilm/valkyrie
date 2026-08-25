@@ -422,3 +422,81 @@ body {
   min-width: calc(var(--u) * 1.2);
   text-align: center;
 }
+
+/* ---- quest log ---- */
+.vk-log {
+  max-width: calc(var(--u) * 30);
+  gap: calc(var(--u) * 0.4);
+}
+.vk-log__controls {
+  display: flex;
+  gap: calc(var(--u) * 0.3);
+}
+.vk-log__entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.3);
+  max-height: calc(var(--u) * 18);
+  overflow-y: auto;
+}
+.vk-log__entry {
+  white-space: pre-wrap;
+}
+.vk-log__entry--editor {
+  color: var(--vk-muted);
+  font-style: italic;
+}
+.vk-log__empty {
+  color: var(--vk-muted);
+}
+.vk-log__var-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.2);
+  max-height: calc(var(--u) * 12);
+  overflow-y: auto;
+}
+.vk-log__var {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.3);
+}
+.vk-log__var label {
+  flex: 1;
+  font-family: var(--vk-mono, monospace);
+  font-size: var(--vk-text-small);
+}
+.vk-log__var-value {
+  width: calc(var(--u) * 3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- inventory ---- */
+.vk-inventory {
+  max-width: calc(var(--u) * 30);
+  gap: calc(var(--u) * 0.4);
+}
+.vk-inventory__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 5), 1fr));
+  gap: calc(var(--u) * 0.4);
+}
+.vk-inventory__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 0.2);
+  height: auto;
+  padding: calc(var(--u) * 0.3);
+}
+.vk-inventory__image {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--vk-radius);
+}
+.vk-inventory__empty {
+  color: var(--vk-muted);
+}

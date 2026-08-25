@@ -14,7 +14,9 @@
 import {
   activationDialog,
   board,
+  inventory,
   monsterDialog,
+  questLog,
   button,
   el,
   eventDialog,
@@ -32,6 +34,7 @@ import {
 import {
   ActivationInstance,
   attackTypes,
+  LogEntry,
   MoMPhase,
   randomAttack,
   QuestRuntime,
@@ -107,6 +110,8 @@ function menu(): void {
             { label: rawText('Event dialog'), onPress: eventDemo },
             { label: rawText('Monster activation'), onPress: activationDemo },
             { label: rawText('Attack a monster'), onPress: monsterDemo },
+            { label: rawText('Quest log'), onPress: logDemo },
+            { label: rawText('Items'), onPress: inventoryDemo },
             { label: rawText('Choose investigators'), onPress: heroesDemo },
             {
               label: rawText('Storage'),
@@ -338,6 +343,61 @@ function monsterDemo(): void {
       children: [backTo(menu), dialog.element, status, label(rawText('Quest log')), entries],
     }),
   )
+}
+
+/**
+ * The quest log, reading a real QuestRuntime rather than a fixture.
+ *
+ * The editor notices come from VarManager writing through to the log when it
+ * creates a variable, so the developer view shows what a scenario author would
+ * actually see.
+ */
+function logDemo(): void {
+  const runtime = new QuestRuntime({ components: new Map() })
+  runtime.log.add(new LogEntry('You enter the hallway. The air is wrong.'))
+  runtime.vars.setValue('#round', 3)
+  runtime.log.add(new LogEntry('The door slams shut behind you.'))
+  runtime.vars.setValue('$clues', 1)
+
+  const log = questLog({
+    onClose: menu,
+    onSetVariable: (name, value) => {
+      runtime.vars.setValue(name, value)
+      render()
+    },
+  })
+
+  const render = (): void => {
+    log.show({
+      entries: runtime.log.toArray().map((entry) => ({
+        text: entry.entry,
+        editor: entry.editor,
+      })),
+      variables: [...runtime.vars.vars.entries()].map(([name, value]) => ({ name, value })),
+    })
+  }
+  render()
+
+  show(panel({ class: 'vk-shell', children: [backTo(menu), log.element] }))
+}
+
+/** The item inventory, inspecting through the real event engine. */
+function inventoryDemo(): void {
+  const status = el('p', { class: 'vk-shell__status', attrs: { 'aria-live': 'polite' } })
+  const view = inventory({
+    onInspect: (id) => {
+      // A real quest queues itemInspect[id]; here the outcome is reported.
+      status.textContent = `Queued the inspect event for ${id}.`
+    },
+    onClose: menu,
+  })
+  view.show([
+    { id: 'QItemKey', name: 'A rusted key' },
+    { id: 'QItemDiary', name: 'A water-stained diary' },
+    { id: 'QItemLantern', name: 'A guttering lantern' },
+  ])
+
+  show(panel({ class: 'vk-shell', children: [backTo(menu), view.element, status] }))
 }
 
 /**

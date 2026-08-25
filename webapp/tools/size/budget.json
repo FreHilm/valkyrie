@@ -10,13 +10,13 @@
     "files": 20
   },
   "@valkyrie/ui": {
-    "raw": 57955,
-    "gzip": 20438,
-    "files": 14
+    "raw": 64489,
+    "gzip": 22981,
+    "files": 16
   },
   "@valkyrie/app": {
-    "raw": 25998,
-    "gzip": 9298,
+    "raw": 28063,
+    "gzip": 9837,
     "files": 5
   }
 }

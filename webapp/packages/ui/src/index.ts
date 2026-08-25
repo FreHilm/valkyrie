@@ -57,6 +57,22 @@ export type {
   MonsterHealthView,
 } from './screens/activationDialog.js'
 export type { ActivationView as ActivationDialogView } from './screens/activationDialog.js'
+export { questLog } from './screens/questLog.js'
+export type {
+  QuestLog,
+  QuestLogOptions,
+  QuestLogStrings,
+  QuestLogView,
+  LogLine,
+  QuestVariable,
+} from './screens/questLog.js'
+export { inventory } from './screens/inventory.js'
+export type {
+  Inventory,
+  InventoryItem,
+  InventoryOptions,
+  InventoryStrings,
+} from './screens/inventory.js'
 export { monsterDialog } from './screens/monsterDialog.js'
 export type {
   MonsterDialog,
