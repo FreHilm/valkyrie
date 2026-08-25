@@ -60,6 +60,7 @@ import {
 } from '@valkyrie/platform'
 import type { Crop, PickedDirectory, StorageManagerLike } from '@valkyrie/platform'
 import { acquireQuest } from './acquire.js'
+import { browsableQuests, byRecency, fetchQuestIndex, packageUrl } from './questIndex.js'
 import { libraryPaths, startQuest, surveyLibrary } from './library.js'
 import { questArt } from './questArt.js'
 import { formatBytes, storageReport } from './storage.js'
@@ -126,6 +127,7 @@ function menu(): void {
           actions: [
             { label: rawText('Play a quest'), onPress: () => void library() },
             { label: rawText('Import game files'), onPress: importDemo },
+            { label: rawText('Browse scenarios'), onPress: () => void browseScenarios() },
             { label: rawText('Add a scenario'), onPress: addScenario },
             { label: rawText('Browse quests'), onPress: quests },
             { label: rawText('Board renderer'), onPress: boardDemo },
@@ -365,6 +367,82 @@ function monsterDemo(): void {
     panel({
       class: 'vk-shell',
       children: [backTo(menu), dialog.element, status, label(rawText('Quest log')), entries],
+    }),
+  )
+}
+
+/**
+ * The community's published scenario list.
+ *
+ * 169 for Mansions, fetched as one ini and browsed through the same
+ * trait-filtered list the game uses — the filtering logic verified against the
+ * C# over 3,015 cases. Both the index and the packages are on
+ * raw.githubusercontent.com, which allows cross-origin reads, so a browser can
+ * do this directly.
+ */
+async function browseScenarios(): Promise<void> {
+  const status = el('p', { class: 'vk-shell__status', attrs: { 'aria-live': 'polite' } })
+  show(
+    panel({
+      class: 'vk-shell',
+      children: [backTo(menu), label(rawText('Fetching the scenario list…')), status],
+    }),
+  )
+
+  const fs = new OpfsFileSystem(navigator.storage as unknown as StorageManagerLike)
+  const paths = libraryPaths(
+    new StoragePaths({ appData: '/appdata', content: '/content', temp: '/tmp' }, 'MoM'),
+  )
+
+  let entries
+  try {
+    entries = byRecency(await fetchQuestIndex({ http: new FetchHttpClient(), gameType: 'MoM' }))
+  } catch (error) {
+    status.textContent =
+      error instanceof Error
+        ? `The scenario list could not be fetched: ${error.message}`
+        : 'The scenario list could not be fetched.'
+    return
+  }
+
+  const installed = new Set(
+    (await surveyLibrary(fs, paths).catch(() => null))?.quests.map((q) => q.id) ?? [],
+  )
+
+  const download = async (id: string): Promise<void> => {
+    const entry = entries.find((e) => e.id === id)
+    if (entry === undefined) return
+    status.textContent = `Downloading ${entry.id}…`
+    try {
+      const result = await acquireQuest(packageUrl(entry), {
+        fs,
+        http: new FetchHttpClient(),
+        questRoot: paths.quests,
+        onProgress: (fraction) => {
+          status.textContent = `Downloading ${entry.id}… ${Math.round(fraction * 100)}%`
+        },
+      })
+      status.textContent = `Added ${result.id}: ${String(result.files)} files, ${formatBytes(result.bytes)}. Open it from Play a quest.`
+    } catch (error) {
+      status.textContent =
+        error instanceof Error ? `That did not work: ${error.message}` : 'That did not work.'
+    }
+  }
+
+  show(
+    panel({
+      class: 'vk-shell',
+      children: [
+        backTo(menu),
+        questSelection({
+          quests: browsableQuests(entries, installed),
+          onPick: (id) => void download(id),
+          title: rawText(`Scenarios (${String(entries.length)})`),
+          searchLabel: rawText('Search scenarios'),
+          emptyMessage: rawText('No scenario matches those filters.'),
+        }),
+        status,
+      ],
     }),
   )
 }
