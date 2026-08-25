@@ -368,6 +368,11 @@ export class QuestSession {
   /** The player clicked something on the board that fires an event. */
   activate(name: string): void {
     this.events.queue(name)
+    // Settling matters most here: a scenario's own UI is a chain of
+    // `display=false` events — the button that turns a cutscene page adds the
+    // next page and removes itself, and showing that as a dialog puts its
+    // untranslated key on screen instead of turning the page.
+    this.settle()
   }
 
   /** A monster was defeated. */

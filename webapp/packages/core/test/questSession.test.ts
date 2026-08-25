@@ -259,6 +259,32 @@ event1=
     expect(quest.view().kind === 'event' && quest.view().name).toBe('TokenDoor')
   })
 
+  it('runs an activated component that does not display without showing it', () => {
+    // A scenario's own UI is built from these: the button that turns a
+    // cutscene page adds the next page, removes itself and shows nothing.
+    const quest = session(`[EventOpening]
+trigger=EventStart
+display=false
+buttons=0
+add=UIContinue1
+[UIContinue1]
+display=false
+buttons=0
+add=UIContinue2
+remove=UIContinue1
+[UIContinue2]
+display=false
+buttons=0
+`)
+    quest.start()
+
+    quest.activate('UIContinue1')
+
+    expect(quest.view().kind).toBe('board')
+    expect(quest.runtime.has('UIContinue2')).toBe(true)
+    expect(quest.runtime.has('UIContinue1')).toBe(false)
+  })
+
   it('moves into the mythos phase when the investigators finish', () => {
     const quest = session('[EventIdle]\n')
     quest.investigatorsDone()
