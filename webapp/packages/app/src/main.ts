@@ -61,6 +61,7 @@ import {
 } from '@valkyrie/platform'
 import type { Crop, PickedDirectory, StorageManagerLike } from '@valkyrie/platform'
 import { acquireQuest } from './acquire.js'
+import { devManifest, loadFromDevServer } from './devLoad.js'
 import { browsableQuests, byRecency, fetchQuestIndex, packageUrl } from './questIndex.js'
 import { libraryPaths, startQuest, surveyLibrary } from './library.js'
 import { questArt } from './questArt.js'
@@ -128,6 +129,7 @@ function menu(): void {
           actions: [
             { label: rawText('Play a quest'), onPress: () => void library() },
             { label: rawText('Import game files'), onPress: importDemo },
+            { label: rawText('Load from dev server'), onPress: () => void devLoad() },
             { label: rawText('Browse scenarios'), onPress: () => void browseScenarios() },
             { label: rawText('Add a scenario'), onPress: addScenario },
             { label: rawText('Browse quests'), onPress: quests },
@@ -446,6 +448,71 @@ async function browseScenarios(): Promise<void> {
       ],
     }),
   )
+}
+
+/**
+ * Loading the command-line importer's output.
+ *
+ * Chrome refuses `showDirectoryPicker` on anything under `~/Library`, and on
+ * macOS that is where both the game install and its downloaded content live —
+ * so the in-browser import cannot reach them on this platform at all. This
+ * copies what `tools/ffg/run-import.mjs` produced into browser storage
+ * instead. It only works against the dev server.
+ */
+async function devLoad(): Promise<void> {
+  const status = el('p', { class: 'vk-shell__status', attrs: { 'aria-live': 'polite' } })
+  const bar = el('progress', { class: 'vk-import__progress' })
+
+  show(
+    panel({
+      class: 'vk-shell',
+      children: [
+        backTo(menu),
+        label(rawText('Load from dev server'), { size: 'large', heading: 1 }),
+        label(
+          rawText(
+            'Chrome will not open folders under ~/Library, which is where the game ' +
+              'install and its downloaded content both live on macOS. This copies ' +
+              'what `npm run import` already produced into browser storage.',
+          ),
+        ),
+        status,
+        bar,
+      ],
+    }),
+  )
+
+  const manifest = await devManifest()
+  if (manifest === null || !manifest.available) {
+    status.textContent =
+      manifest === null
+        ? 'The dev server is not answering. This only works under `npm run dev`.'
+        : 'Nothing imported yet. Run the command-line importer first.'
+    return
+  }
+
+  const fs = new OpfsFileSystem(navigator.storage as unknown as StorageManagerLike)
+  const paths = libraryPaths(
+    new StoragePaths({ appData: '/appdata', content: '/content', temp: '/tmp' }, 'MoM'),
+  )
+
+  try {
+    const result = await loadFromDevServer(
+      fs,
+      manifest,
+      { importPath: paths.imported, questRoot: paths.quests },
+      (done, total, what) => {
+        bar.max = total
+        bar.value = done
+        status.textContent = `${String(done)} of ${String(total)} — ${what}`
+      },
+    )
+    status.textContent =
+      `Loaded ${String(result.files)} files, ${formatBytes(result.bytes)}, ` +
+      `${String(result.quests.length)} scenarios. Open Play a quest.`
+  } catch (error) {
+    status.textContent = error instanceof Error ? `That did not work: ${error.message}` : 'Failed.'
+  }
 }
 
 /**

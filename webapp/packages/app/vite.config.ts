@@ -1,4 +1,5 @@
 import { defineConfig } from 'vite'
+import { devAssets } from './devAssets.js'
 
 /**
  * The app build.
@@ -9,6 +10,9 @@ import { defineConfig } from 'vite'
  */
 export default defineConfig({
   base: './',
+  // Development only: hands the CLI import's output to the running app,
+  // because Chrome will not open the folders it came from.
+  plugins: [devAssets()],
   build: {
     outDir: 'dist-site',
     emptyOutDir: true,
