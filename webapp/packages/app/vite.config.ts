@@ -1,5 +1,9 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import { devAssets } from './devAssets.js'
+
+const packageSource = (name: string): string =>
+  fileURLToPath(new URL(`../${name}/src/index.ts`, import.meta.url))
 
 /**
  * The app build.
@@ -18,6 +22,17 @@ export default defineConfig({
     emptyOutDir: true,
     // The version is stamped in by the release workflow from version.txt.
     sourcemap: true,
+  },
+  // Straight to the workspace sources. Resolving through package exports gets
+  // the built `dist`, so an edit to a package showed no effect until it was
+  // rebuilt — which reads as the change not working rather than not arriving.
+  resolve: {
+    alias: {
+      '@valkyrie/core': packageSource('core'),
+      '@valkyrie/platform': packageSource('platform'),
+      '@valkyrie/ui/styles.css': fileURLToPath(new URL('../ui/src/styles.css', import.meta.url)),
+      '@valkyrie/ui': packageSource('ui'),
+    },
   },
   server: { port: 5173, open: false },
   define: {
