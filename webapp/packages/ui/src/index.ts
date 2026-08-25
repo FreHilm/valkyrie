@@ -46,6 +46,8 @@ export type { CameraLimits } from './camera.js'
 export { board, Layer } from './board.js'
 export { buildScene, sceneBounds } from './boardScene.js'
 export type { SceneItem, SceneSources, TileArt, TokenArt } from './boardScene.js'
+export { questUiFontSize, questUiLayer } from './questUiLayer.js'
+export type { QuestUiElement, QuestUiLayer, QuestUiLayerOptions } from './questUiLayer.js'
 export type { Board, BoardItem, BoardOptions } from './board.js'
 
 export { eventDialog } from './screens/eventDialog.js'

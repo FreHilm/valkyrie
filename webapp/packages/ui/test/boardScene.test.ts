@@ -117,11 +117,13 @@ describe('buildScene', () => {
     expect(scene.map((s) => s.layer)).toEqual([Layer.TOKEN, Layer.TOKEN])
   })
 
-  it('places UI elements, which a scenario uses as clickable screens', () => {
+  it('leaves UI elements off the board, because they are screen-space', () => {
+    // Quest.cs:2000 parents them to a canvas sized to the screen, not to the
+    // board. On the grid they became 1x1 squares at whatever pixel their
+    // screen fraction resolved to.
     const scene = buildScene([item('UIContinue', 'UI')], [], sources())
 
-    expect(scene).toHaveLength(1)
-    expect(scene[0]?.layer).toBe(Layer.TOKEN)
+    expect(scene).toHaveLength(0)
   })
 
   it('ignores components that are not on the board', () => {

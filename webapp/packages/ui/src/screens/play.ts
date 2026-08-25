@@ -16,6 +16,8 @@ import { eventDialog } from './eventDialog.js'
 import { board } from '../board.js'
 import { buildScene } from '../boardScene.js'
 import type { SceneItem, SceneSources } from '../boardScene.js'
+import { questUiLayer } from '../questUiLayer.js'
+import type { QuestUiElement } from '../questUiLayer.js'
 import { button, label, panel } from '../components.js'
 import { clear, el } from '../dom.js'
 import { rawText } from '../text.js'
@@ -86,6 +88,13 @@ export interface PlayOptions {
     into: HTMLElement,
     refresh: () => void,
   ) => void
+  /**
+   * The scenario's own screen-space elements, rebuilt on every refresh.
+   *
+   * A quest adds and removes these as it runs — the opening journal is three
+   * of them, and the event that dismisses it removes all three.
+   */
+  questUi?: () => readonly QuestUiElement[]
   /** Loads and crops an image; resolves to null when it is unavailable. */
   loadTexture?: (
     path: string,
@@ -133,7 +142,18 @@ export function playScreen(options: PlayOptions): PlayScreen {
     },
   })
 
-  const element = panel({ class: 'vk-play', children: [surface, overlay, controls] })
+  const questUi = questUiLayer({
+    onSelect: (name) => {
+      session.activate(name)
+      refresh()
+    },
+    ...(options.sources.onWarning === undefined ? {} : { onWarning: options.sources.onWarning }),
+  })
+
+  const element = panel({
+    class: 'vk-play',
+    children: [surface, questUi.element, overlay, controls],
+  })
 
   /** Art already requested, so a redraw does not re-request it. */
   const textures = new Map<string, CanvasImageSource | null>()
@@ -179,6 +199,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
     }
 
     view.setItems(scene)
+    questUi.setElements(options.questUi?.() ?? [])
   }
 
   function refresh(): void {
@@ -288,6 +309,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
     refresh,
     destroy: () => {
       view.destroy()
+      questUi.destroy()
     },
   }
 }

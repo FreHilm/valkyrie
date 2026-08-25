@@ -169,8 +169,7 @@ describe('TextureCache', () => {
       const closed: unknown[] = []
       const instance = new TextureCache({
         read: async () => new Uint8Array([1]),
-        createBitmap: async () =>
-          ({ width: 1, height: 1, close: () => closed.push(1) }),
+        createBitmap: async () => ({ width: 1, height: 1, close: () => closed.push(1) }),
         // One 1x1 bitmap is four bytes, so this holds exactly one.
         limit: 4,
       })
@@ -184,8 +183,7 @@ describe('TextureCache', () => {
       const closed: unknown[] = []
       const instance = new TextureCache({
         read: async () => new Uint8Array([1]),
-        createBitmap: async () =>
-          ({ width: 1, height: 1, close: () => closed.push(1) }),
+        createBitmap: async () => ({ width: 1, height: 1, close: () => closed.push(1) }),
       })
       await instance.load('a')
       await instance.load('b')

@@ -116,7 +116,11 @@ export function buildScene(
       continue
     }
 
-    if (type === 'Token' || type === 'Door' || type === 'UI') {
+    // Not 'UI': a [UI...] component is a screen-space overlay, not a board
+    // piece. Placing one on the grid put a 1x1 untextured square wherever its
+    // screen fraction happened to land, which is what a scenario's opening
+    // journal was being drawn as.
+    if (type === 'Token' || type === 'Door') {
       const art = sources.token(item.name)
       // A token with no art is still a thing the player can click, so it is
       // drawn as a plain marker rather than dropped.
