@@ -500,7 +500,7 @@ async function devLoad(): Promise<void> {
     const result = await loadFromDevServer(
       fs,
       manifest,
-      { importPath: paths.imported, questRoot: paths.quests },
+      { contentRoot: paths.content, importPath: paths.imported, questRoot: paths.quests },
       (done, total, what) => {
         bar.max = total
         bar.value = done
@@ -717,7 +717,25 @@ async function library(): Promise<void> {
         title: rawText('Scenarios'),
         actions: state.quests.map((quest) => ({
           label: rawText(`${quest.name} (${quest.type})`),
-          onPress: () => void play(fs, paths, quest.path),
+          onPress: () => {
+            // Without this a failure to start is silent, which reads as the
+            // button doing nothing at all.
+            play(fs, paths, quest.path).catch((error: unknown) => {
+              show(
+                panel({
+                  class: 'vk-shell',
+                  children: [
+                    backTo(menu),
+                    label(rawText('That quest could not be started'), {
+                      heading: 2,
+                      size: 'medium',
+                    }),
+                    label(rawText(error instanceof Error ? error.message : String(error))),
+                  ],
+                }),
+              )
+            })
+          },
         })),
       }),
     )

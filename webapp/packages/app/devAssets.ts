@@ -18,10 +18,26 @@ import { join, relative, sep } from 'node:path'
 import type { Plugin } from 'vite'
 
 const CACHE = join(homedir(), '.cache', 'valkyrie-web-port')
+/** Valkyrie's own content packs, which live in the repository. */
+const CONTENT = join(
+  process.cwd(),
+  '..',
+  '..',
+  '..',
+  'unity',
+  'Assets',
+  'StreamingAssets',
+  'content',
+)
 
 interface Entry {
   path: string
   size: number
+}
+
+/** Art a pack ships itself, as opposed to art the import supplies. */
+function isArt(path: string): boolean {
+  return /\.(png|jpg|jpeg|webp|ogg|dds)$/i.test(path)
 }
 
 function walk(root: string, dir = root, into: Entry[] = []): Entry[] {
@@ -43,8 +59,13 @@ export function devAssets(): Plugin {
       server.middlewares.use('/local/manifest', (_request, response) => {
         const imported = join(CACHE, 'ffg', 'MoM-import', 'import')
         const quests = join(CACHE, 'quests', 'extracted')
+        // The content packs matter as much as the art: they are what say what a
+        // monster is, which tile side to draw and what a token looks like.
+        // Without them a quest loads and then finds nothing to play with.
+        const content = join(CONTENT, 'MoM')
         const body = JSON.stringify({
           available: existsSync(imported),
+          content: walk(content).filter((e) => e.path.endsWith('.ini') || isArt(e.path)),
           imported: walk(imported),
           quests: readdirSync(quests, { withFileTypes: true })
             .filter((e) => e.isDirectory())
@@ -52,6 +73,19 @@ export function devAssets(): Plugin {
         })
         response.setHeader('content-type', 'application/json')
         response.end(body)
+      })
+
+      server.middlewares.use('/local/content', (request, response) => {
+        const url = new URL(request.url ?? '', 'http://localhost')
+        const wanted = url.searchParams.get('path') ?? ''
+        const full = join(CONTENT, 'MoM', wanted)
+        if (!full.startsWith(CONTENT) || !existsSync(full) || statSync(full).isDirectory()) {
+          response.statusCode = 404
+          response.end('not found')
+          return
+        }
+        response.setHeader('content-type', 'application/octet-stream')
+        createReadStream(full).pipe(response)
       })
 
       server.middlewares.use('/local/file', (request, response) => {

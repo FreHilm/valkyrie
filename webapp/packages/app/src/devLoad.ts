@@ -15,11 +15,15 @@ import type { FileSystem } from '@valkyrie/platform'
 
 export interface DevManifest {
   available: boolean
+  /** Valkyrie's own content packs, without which a quest has nothing to play with. */
+  content: { path: string; size: number }[]
   imported: { path: string; size: number }[]
   quests: { id: string; files: { path: string; size: number }[] }[]
 }
 
 export interface DevLoadTargets {
+  /** Where content packs belong. */
+  contentRoot: string
   /** Where imported assets belong. */
   importPath: string
   /** Where extracted scenarios belong. */
@@ -57,6 +61,13 @@ export async function loadFromDevServer(
 ): Promise<DevLoadResult> {
   const jobs: { from: string; to: string; size: number }[] = []
 
+  for (const entry of manifest.content ?? []) {
+    jobs.push({
+      from: `content/${entry.path}`,
+      to: `${targets.contentRoot}/${entry.path}`,
+      size: entry.size,
+    })
+  }
   for (const entry of manifest.imported) {
     jobs.push({
       from: `ffg/MoM-import/import/${entry.path}`,
@@ -77,7 +88,12 @@ export async function loadFromDevServer(
   let bytes = 0
   let done = 0
   for (const job of jobs) {
-    const response = await fetch(`/local/file?path=${encodeURIComponent(job.from)}`)
+    // Content packs come from the repository rather than the cache, so they
+    // are fetched through their own route.
+    const url = job.from.startsWith('content/')
+      ? `/local/content?path=${encodeURIComponent(job.from.slice('content/'.length))}`
+      : `/local/file?path=${encodeURIComponent(job.from)}`
+    const response = await fetch(url)
     if (response.ok) {
       const data = new Uint8Array(await response.arrayBuffer())
       await fs.writeBytes(job.to, data)
