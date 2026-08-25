@@ -62,14 +62,38 @@ import {
 import type { Crop, PickedDirectory, StorageManagerLike } from '@valkyrie/platform'
 import { acquireQuest } from './acquire.js'
 import { devManifest, loadFromDevServer } from './devLoad.js'
+import { clearStage, lastStage, stage } from './trace.js'
 import { browsableQuests, byRecency, fetchQuestIndex, packageUrl } from './questIndex.js'
 import { libraryPaths, startQuest, surveyLibrary } from './library.js'
-import { questArt, tileImages } from './questArt.js'
+import { questArt, questUiElements, tileImages } from './questArt.js'
 import { formatBytes, storageReport } from './storage.js'
 import { persistenceMessage, requestPersistence } from './persistence.js'
 import { watchForUpdate } from './serviceWorker.js'
 
+// Imported rather than linked from index.html: a href to ../ui/src reaches
+// outside Vite's root, where it is answered by the SPA fallback — index.html,
+// served as a stylesheet, parsing to no rules and reporting no error.
+import '@valkyrie/ui/styles.css'
+
 declare const __VALKYRIE_VERSION__: string
+
+/**
+ * The pixel size behind an object URL.
+ *
+ * A screen-space element is laid out from its art's aspect ratio, and the only
+ * way to learn it is to let the browser decode the image it is about to show
+ * anyway.
+ */
+async function imageSize(url: string): Promise<{ width: number; height: number } | null> {
+  const image = new Image()
+  image.src = url
+  try {
+    await image.decode()
+  } catch {
+    return null
+  }
+  return { width: image.naturalWidth, height: image.naturalHeight }
+}
 
 /**
  * A quest with no events, so the activation demo exercises the round
@@ -92,8 +116,26 @@ const root: HTMLElement = mount
 installUnits(document.documentElement, window)
 
 /** Swaps the visible screen. One at a time, as the Unity app does. */
+/**
+ * Whatever the screen being replaced needs to let go of.
+ *
+ * The board keeps a ResizeObserver and an animation frame alive. Replacing the
+ * page contents detaches its canvas but leaves both running, so every visit
+ * left another live board observing a canvas nobody could see — which is both
+ * the "ResizeObserver loop" notice that follows you back to the menu and a
+ * steady climb towards the tab running out of memory.
+ */
+let disposeScreen: (() => void) | null = null
+
 function show(...nodes: (Node | null)[]): void {
+  disposeScreen?.()
+  disposeScreen = null
   root.replaceChildren(...nodes.filter((n): n is Node => n !== null))
+}
+
+/** Registers the teardown for the screen just shown. */
+function onLeave(dispose: () => void): void {
+  disposeScreen = dispose
 }
 
 const backTo = (screen: () => void): HTMLElement =>
@@ -118,6 +160,15 @@ const QUESTS = itemsFrom([
 ])
 
 function menu(): void {
+  const died = lastStage()
+  if (died !== null) {
+    // The tab did not finish what it was doing last time; say what it was.
+    clearStage()
+    reportFailure(
+      'The last attempt did not finish',
+      `Stopped at: ${died.what}${died.detail === undefined ? '' : `\n${died.detail}`}`,
+    )
+  }
   show(
     panel({
       class: 'vk-shell',
@@ -500,7 +551,12 @@ async function devLoad(): Promise<void> {
     const result = await loadFromDevServer(
       fs,
       manifest,
-      { contentRoot: paths.content, importPath: paths.imported, questRoot: paths.quests },
+      {
+        contentRoot: paths.content,
+        uiTextRoot: paths.uiText,
+        importPath: paths.imported,
+        questRoot: paths.quests,
+      },
       (done, total, what) => {
         bar.max = total
         bar.value = done
@@ -756,8 +812,10 @@ async function play(
   paths: ReturnType<typeof libraryPaths>,
   questPath: string,
 ): Promise<void> {
+  stage('play: loading quest', questPath)
   const { session, resolveTexture, content, components, gameType, pixelsPerSquare } =
     await startQuest(fs, paths, questPath)
+  stage('play: quest loaded')
   session.runtime.heroes.push(
     { heroName: 'HeroAshcanPete', activated: false },
     { heroName: 'HeroAgnesBaker', activated: false },
@@ -783,6 +841,53 @@ async function play(
   // only fetched for tiles already placed. Learning the sizes first is what
   // breaks that circle — without it no tile is ever drawn.
   const prefetch = tileImages({ content, components, resolveTexture })
+  stage('play: tile images resolved', `${String(prefetch.length)} tiles`)
+
+  // The scenario's own screen-space art goes to <img>, not to the canvas, so
+  // it needs a URL rather than a bitmap. Uncropped, that is the file's own
+  // bytes and the browser decodes them itself; a crop has to go through a
+  // canvas because there is nothing else to cut a sprite sheet with.
+  const urls = new Map<string, string | null>()
+  const uiSizes = new Map<string, { width: number; height: number }>()
+
+  function imageUrl(path: string, crop?: Crop): string | null {
+    const key =
+      crop === undefined
+        ? path
+        : `${path}#${String(crop.x)},${String(crop.y)},${String(crop.width)},${String(crop.height)}`
+    const known = urls.get(key)
+    if (known !== undefined) return known
+    urls.set(key, null)
+    void (async () => {
+      const url = await buildUrl(path, crop)
+      if (url === null) return
+      urls.set(key, url)
+      const size = await imageSize(url)
+      if (size !== null) uiSizes.set(path, size)
+      screen.refresh()
+    })()
+    return null
+  }
+
+  async function buildUrl(path: string, crop?: Crop): Promise<string | null> {
+    if (crop === undefined) {
+      try {
+        return URL.createObjectURL(new Blob([new Uint8Array(await fs.readBytes(path))]))
+      } catch {
+        return null
+      }
+    }
+    const bitmap = await textures.load(path, crop)
+    if (bitmap === null) return null
+    const canvas = document.createElement('canvas')
+    canvas.width = bitmap.width
+    canvas.height = bitmap.height
+    canvas.getContext('2d')?.drawImage(bitmap, 0, 0)
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, 'image/png')
+    })
+    return blob === null ? null : URL.createObjectURL(blob)
+  }
 
   const screen = playScreen({
     session,
@@ -794,6 +899,16 @@ async function play(
       gameType,
       pixelsPerSquare,
     }),
+    questUi: () =>
+      questUiElements({
+        content,
+        components,
+        onBoard: session.runtime.boardItems().map((item) => item.name),
+        resolveTexture,
+        imageUrl,
+        sizeOf: (path) => uiSizes.get(path) ?? sizes.get(path) ?? null,
+        text: (key) => key.translate(),
+      }),
     loadTexture: async (path: string, crop?: Crop) => {
       const file = resolveTexture(path) ?? path
       const image = await textures.load(file, crop)
@@ -806,16 +921,28 @@ async function play(
   })
 
   show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
+  onLeave(() => {
+    // Leaving on purpose is not the tab dying mid-load, so the breadcrumb goes
+    // with it — otherwise the menu reports a failure that never happened.
+    clearStage()
+    screen.destroy()
+    textures.clear()
+    for (const url of urls.values()) if (url !== null) URL.revokeObjectURL(url)
+    urls.clear()
+  })
 
   // Sequential: a quest can place twenty 2048x2048 tiles, and decoding them all
   // at once is how a tab runs out of memory.
   void (async () => {
     for (const path of prefetch) {
+      stage('play: decoding tile', path)
       const image = await textures.load(path)
       if (image === null) continue
       sizes.set(path, { width: image.width, height: image.height })
       screen.refresh()
     }
+    stage('play: all tiles decoded')
+    clearStage()
   })()
 }
 
@@ -988,6 +1115,9 @@ function boardDemo(): void {
 
   b.setItems(items)
   requestAnimationFrame(() => b.frameAll())
+  onLeave(() => {
+    b.destroy()
+  })
 
   show(
     panel({
@@ -1064,6 +1194,10 @@ function reportFailure(what: string, detail: string): void {
 }
 
 window.addEventListener('error', (event) => {
+  // "ResizeObserver loop completed with undelivered notifications" is a notice
+  // every browser emits when a layout settles over two frames. It is not a
+  // failure, and reporting it as one is noise.
+  if (event.message.includes('ResizeObserver loop')) return
   reportFailure(
     'Something went wrong',
     `${event.message}\n${event.filename}:${String(event.lineno)}`,

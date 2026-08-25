@@ -13,15 +13,19 @@
 
 import {
   CustomMonster,
+  ImageData,
   MonsterData,
   MPlace,
+  QuestUI,
+  TextAlignment,
   Tile,
   TileSideData,
   Token,
   TokenData,
 } from '@valkyrie/core'
-import type { ContentData, QuestComponent } from '@valkyrie/core'
-import type { SceneSources, TileArt, TokenArt } from '@valkyrie/ui'
+import type { ContentData, QuestComponent, StringKey } from '@valkyrie/core'
+import type { Crop } from '@valkyrie/platform'
+import type { QuestUiElement, SceneSources, TileArt, TokenArt } from '@valkyrie/ui'
 
 /** Pixel dimensions of a decoded image, or null while it is still loading. */
 export type SizeLookup = (path: string) => { width: number; height: number } | null
@@ -224,4 +228,83 @@ export function tileImages(options: {
     if (file !== null) paths.add(file)
   }
   return [...paths]
+}
+
+/** What a scenario's screen-space elements need, beyond their own component. */
+export interface QuestUiOptions {
+  content: ContentData
+  components: ReadonlyMap<string, QuestComponent>
+  /** The names currently on the board, in the order they were added. */
+  onBoard: readonly string[]
+  resolveTexture: (name: string) => string | null
+  /** Turns a resolved file into something an `<img>` can show. */
+  imageUrl: (path: string, crop?: Crop) => string | null
+  /** Pixel size of a decoded image, for the aspect an image element takes. */
+  sizeOf: SizeLookup
+  /** Resolves the element's `uitext` key. */
+  text: (key: StringKey) => string
+}
+
+/**
+ * Builds the scenario's screen-space elements from what is on the board.
+ *
+ * `Quest.UI` looks the image up as content `ImageData` first — which is how a
+ * scenario reuses a sheet the game already ships — and only then as a file
+ * beside the quest. Both paths end at the same `<img>`.
+ */
+export function questUiElements(options: QuestUiOptions): QuestUiElement[] {
+  const { content, components, resolveTexture, imageUrl, sizeOf, text } = options
+  const built: QuestUiElement[] = []
+
+  for (const name of options.onBoard) {
+    const component = components.get(name)
+    if (!(component instanceof QuestUI)) continue
+
+    let image: string | null = null
+    let aspect = component.aspect
+
+    if (component.imageName.length > 0) {
+      const data = content.tryGet(ImageData, component.imageName)
+      const declared = data?.image ?? component.imageName
+      const file = resolveTexture(declared)
+      if (file !== null) {
+        const crop =
+          data !== null && data !== undefined && data.width > 0 && data.height > 0
+            ? { x: data.x, y: data.y, width: data.width, height: data.height }
+            : undefined
+        image = imageUrl(file, crop)
+        // The aspect of an image element is the art's, not the declared one.
+        const size = crop ?? sizeOf(file)
+        if (size !== null && size.height > 0) aspect = size.width / size.height
+      }
+    }
+
+    built.push({
+      name,
+      image,
+      aspect,
+      text: text(component.uiText),
+      placement: {
+        x: component.location?.x ?? 0,
+        y: component.location?.y ?? 0,
+        size: component.size,
+        hAlign: component.hAlign,
+        vAlign: component.vAlign,
+        verticalUnits: component.verticalUnits,
+      },
+      textSize: component.textSize,
+      textColour: component.textColor,
+      backgroundColour: component.textBackgroundColor,
+      textAlignment:
+        component.textAlignment === TextAlignment.TOP
+          ? 'top'
+          : component.textAlignment === TextAlignment.BOTTOM
+            ? 'bottom'
+            : 'centre',
+      border: component.border,
+      clickable: component.enableClick,
+    })
+  }
+
+  return built
 }
