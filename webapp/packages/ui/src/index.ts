@@ -91,6 +91,15 @@ export type {
   InventoryOptions,
   InventoryStrings,
 } from './screens/inventory.js'
+export { codePuzzle, imagePuzzle, slidePuzzle, towerPuzzle } from './screens/puzzles.js'
+export type {
+  CodePuzzleView,
+  ImagePuzzleView,
+  PuzzleChrome,
+  PuzzleStrings,
+  SlidePuzzleView,
+  TowerPuzzleView,
+} from './screens/puzzles.js'
 export { importScreen } from './screens/import.js'
 export type {
   ImportScreen,

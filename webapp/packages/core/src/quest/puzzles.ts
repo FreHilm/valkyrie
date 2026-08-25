@@ -243,6 +243,28 @@ export class PuzzleImage implements PuzzleState {
     return puzzle
   }
 
+  /**
+   * Swaps the pieces in two slots.
+   *
+   * The C# does this inside a drag handler, mixing pointer arithmetic with the
+   * state change (`PuzzleImageWindow.cs:318`). Separating it is what lets the
+   * move be made from a keyboard as well as a mouse, and be tested at all.
+   *
+   * Returns false when either slot is not on the board, so a caller cannot
+   * silently count a move that did not happen.
+   */
+  swap(a: TilePosition, b: TilePosition): boolean {
+    const from = this.state.get(a.key)
+    const to = this.state.get(b.key)
+    if (from === undefined || to === undefined) return false
+    if (a.key === b.key) return false
+
+    this.state.set(a.key, [from[0], to[1]])
+    this.state.set(b.key, [to[0], from[1]])
+    this.moves++
+    return true
+  }
+
   solved(): boolean {
     for (const [slot, piece] of this.state.values()) {
       if (slot.x !== piece.x || slot.y !== piece.y) return false
@@ -338,6 +360,9 @@ export class SlideBlock {
   }
 }
 
+/** The slide puzzle is played on a six-by-six board. */
+const SLIDE_BOARD = 6
+
 export class PuzzleSlide implements PuzzleState {
   puzzle: SlideBlock[] = []
   moves = 0
@@ -352,6 +377,49 @@ export class PuzzleSlide implements PuzzleState {
   }
 
   /** The target block escapes at x = 6. */
+  /**
+   * Moves a block along its own axis.
+   *
+   * A block slides only the way it is laid: `rotation` false is horizontal.
+   * The C# works this out from pointer position inside a drag handler
+   * (`PuzzleSlideWindow.cs:313`) and clamps against the other blocks as it
+   * goes; here the legality is one question with one answer, which is what
+   * makes it testable and reachable from a keyboard.
+   *
+   * Returns false when the move is blocked or off its axis, so a caller cannot
+   * count a move that did not happen.
+   */
+  moveBlock(index: number, x: number, y: number): boolean {
+    const block = this.puzzle[index]
+    if (block === undefined) return false
+    if (block.xpos === x && block.ypos === y) return false
+
+    // Off-axis moves are not merely illegal, they are not what a block does.
+    if (block.rotation ? x !== block.xpos : y !== block.ypos) return false
+
+    const moved = block.clone()
+    moved.xpos = x
+    moved.ypos = y
+
+    // The board is six squares wide; the exit lane is the one square a target
+    // block may occupy beyond it.
+    const width = moved.rotation ? 1 : moved.xlen
+    const height = moved.rotation ? moved.ylen : 1
+    if (moved.xpos < 0 || moved.ypos < 0) return false
+    if (moved.ypos + height > SLIDE_BOARD) return false
+    if (moved.xpos + width > SLIDE_BOARD && !moved.target) return false
+
+    for (const [other, candidate] of this.puzzle.entries()) {
+      if (other === index) continue
+      if (candidate.blocksBlock(moved)) return false
+    }
+
+    block.xpos = x
+    block.ypos = y
+    this.moves++
+    return true
+  }
+
   solved(): boolean {
     return this.puzzle[0]?.xpos === 6
   }

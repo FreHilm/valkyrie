@@ -16,6 +16,7 @@ import {
   PuzzleSlide,
   PuzzleTower,
   SlideBlock,
+  TilePosition,
 } from '../src/quest/puzzles.js'
 
 const fields = (o: Record<string, string>) => new Map(Object.entries(o))
@@ -451,5 +452,117 @@ describe('PuzzleTower', () => {
     const text = saved({ moves: '4', 0: '7 6', 1: '', 2: '5' }).toSectionString('1')
 
     expect(text).toBe('[PuzzleTower1]\nmoves=4\n0=7 6\n1\n2=5\n\n')
+  })
+})
+
+describe('puzzle moves', () => {
+  describe('PuzzleImage.swap', () => {
+    const puzzle = (): PuzzleImage => PuzzleImage.generate(2, 2, (min) => min)
+
+    it('exchanges the pieces in two slots and counts the move', () => {
+      const image = puzzle()
+      const before = [...image.state.values()].map(([slot, piece]) => `${slot.key}:${piece.key}`)
+
+      expect(image.swap(new TilePosition(0, 0), new TilePosition(1, 0))).toBe(true)
+      expect(image.moves).toBe(1)
+      const after = [...image.state.values()].map(([slot, piece]) => `${slot.key}:${piece.key}`)
+      expect(after).not.toEqual(before)
+    })
+
+    it('leaves the slots where they are and moves only the pieces', () => {
+      const image = puzzle()
+      image.swap(new TilePosition(0, 0), new TilePosition(1, 0))
+      const slots = [...image.state.values()].map(([slot]) => slot.key).sort()
+
+      expect(slots).toEqual(['0 0', '0 1', '1 0', '1 1'])
+    })
+
+    it('refuses a slot that is not on the board', () => {
+      // Counting a move that did not happen would let a player "solve" a
+      // puzzle by dragging into empty space.
+      const image = puzzle()
+
+      expect(image.swap(new TilePosition(0, 0), new TilePosition(9, 9))).toBe(false)
+      expect(image.moves).toBe(0)
+    })
+
+    it('refuses to swap a slot with itself', () => {
+      const image = puzzle()
+
+      expect(image.swap(new TilePosition(0, 0), new TilePosition(0, 0))).toBe(false)
+      expect(image.moves).toBe(0)
+    })
+
+    it('is solved once every piece is back in its own slot', () => {
+      const image = PuzzleImage.generate(2, 1, (min) => min)
+      // The generator's shuffle is deterministic here, so undo it by swapping
+      // until it reports solved.
+      if (!image.solved()) image.swap(new TilePosition(0, 0), new TilePosition(1, 0))
+
+      expect(image.solved()).toBe(true)
+    })
+  })
+
+  describe('PuzzleSlide.moveBlock', () => {
+    const slide = (blocks: string[]): PuzzleSlide => {
+      const data = new Map(blocks.map((b, i) => [`Block${String(i)}`, b]))
+      return PuzzleSlide.fromSaved(data)
+    }
+
+    it('slides a horizontal block along its row', () => {
+      const puzzle = slide(['false,2,1,0,2,true'])
+
+      expect(puzzle.moveBlock(0, 1, 2)).toBe(true)
+      expect(puzzle.puzzle[0]?.xpos).toBe(1)
+      expect(puzzle.moves).toBe(1)
+    })
+
+    it('refuses to move a horizontal block off its row', () => {
+      // A block does not merely fail to move sideways; that is not a thing a
+      // block does.
+      const puzzle = slide(['false,2,1,0,2,true'])
+
+      expect(puzzle.moveBlock(0, 0, 3)).toBe(false)
+      expect(puzzle.moves).toBe(0)
+    })
+
+    it('refuses a move blocked by another block', () => {
+      const puzzle = slide(['false,2,1,0,2,true', 'false,2,1,2,2,false'])
+
+      expect(puzzle.moveBlock(0, 1, 2)).toBe(false)
+      expect(puzzle.puzzle[0]?.xpos).toBe(0)
+    })
+
+    it('refuses a move off the board', () => {
+      const puzzle = slide(['false,2,1,0,2,true'])
+
+      expect(puzzle.moveBlock(0, -1, 2)).toBe(false)
+    })
+
+    it('lets the target block leave through the exit lane', () => {
+      // The one square beyond the board is how the puzzle is won.
+      const puzzle = slide(['false,2,1,4,2,true'])
+
+      expect(puzzle.moveBlock(0, 5, 2)).toBe(true)
+    })
+
+    it('keeps a non-target block on the board', () => {
+      const puzzle = slide(['false,2,1,4,2,false'])
+
+      expect(puzzle.moveBlock(0, 5, 2)).toBe(false)
+    })
+
+    it('does not count a move that changes nothing', () => {
+      const puzzle = slide(['false,2,1,0,2,true'])
+
+      expect(puzzle.moveBlock(0, 0, 2)).toBe(false)
+      expect(puzzle.moves).toBe(0)
+    })
+
+    it('ignores a block that is not there', () => {
+      const puzzle = slide(['false,2,1,0,2,true'])
+
+      expect(puzzle.moveBlock(9, 1, 2)).toBe(false)
+    })
   })
 })
