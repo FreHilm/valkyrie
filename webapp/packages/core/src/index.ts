@@ -35,6 +35,7 @@ export {
   concatPath,
   headlessContext,
   TEXTURE_EXTENSIONS,
+  TILE_PIXELS_PER_SQUARE,
   WEB_TEXTURE_EXTENSIONS,
 } from './content/context.js'
 export type { ContentContext } from './content/context.js'

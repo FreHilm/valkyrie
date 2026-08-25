@@ -60,6 +60,21 @@ export const TEXTURE_EXTENSIONS = ['.dds', '.pvr', '.png', '.jpg', '.jpeg', '.te
 export const WEB_TEXTURE_EXTENSIONS = ['.webp', ...TEXTURE_EXTENSIONS] as const
 
 /**
+ * `GameType.TilePixelPerSquare()`, which a tile side falls back to when it
+ * declares no `pps` of its own.
+ *
+ * Descent tiles were imported at 105 pixels per inch; a Mansions tile is 1024
+ * pixels across 3.5 inches. Getting this wrong does not fail loudly — the tile
+ * lands in the wrong place, or with a zero here, nowhere at all.
+ */
+export const TILE_PIXELS_PER_SQUARE = {
+  D2E: 105,
+  /** Halved on Android in the C#, where texture memory is the constraint. */
+  MoM: 1024 / 3.5,
+  MoMAndroid: 512 / 3.5,
+} as const
+
+/**
  * The C# builds content paths two different ways, and the difference is
  * observable, so both are modelled rather than collapsed into one helper.
  *

@@ -19,6 +19,7 @@ import {
   concatPath,
   headlessContext,
   TEXTURE_EXTENSIONS,
+  TILE_PIXELS_PER_SQUARE,
   WEB_TEXTURE_EXTENSIONS,
 } from '../src/content/context.js'
 import {
@@ -716,6 +717,16 @@ describe('FormatVersions', () => {
     expect(requiresConversionKit('holymansion')).toBe(true)
     expect(requiresConversionKit('HOLYMANSION')).toBe(true)
     expect(requiresConversionKit('SomethingElse')).toBe(false)
+  })
+})
+
+describe('TILE_PIXELS_PER_SQUARE', () => {
+  it('matches the scales the C# game types return', () => {
+    // GameType.cs:187 and :279. Getting these wrong does not fail loudly — the
+    // tile lands in the wrong place, or with a zero, nowhere at all.
+    expect(TILE_PIXELS_PER_SQUARE.D2E).toBe(105)
+    expect(TILE_PIXELS_PER_SQUARE.MoM).toBeCloseTo(1024 / 3.5)
+    expect(TILE_PIXELS_PER_SQUARE.MoMAndroid).toBeCloseTo(512 / 3.5)
   })
 })
 

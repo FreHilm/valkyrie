@@ -31,8 +31,18 @@ import { readFromString } from '../../packages/core/src/ini/IniRead.ts'
 import { setLogSink } from '../../packages/core/src/ini/logger.ts'
 import { ContentData } from '../../packages/core/src/content/ContentData.ts'
 import { ContentLoader } from '../../packages/core/src/content/ContentLoader.ts'
-import { headlessContext, WEB_TEXTURE_EXTENSIONS } from '../../packages/core/src/content/context.ts'
-import { ActivationData, MonsterData } from '../../packages/core/src/content/types.ts'
+import {
+  headlessContext,
+  TILE_PIXELS_PER_SQUARE,
+  WEB_TEXTURE_EXTENSIONS,
+} from '../../packages/core/src/content/context.ts'
+import {
+  ActivationData,
+  MonsterData,
+  TileSideData,
+  TokenData,
+} from '../../packages/core/src/content/types.ts'
+import { buildScene, sceneBounds } from '../../packages/ui/src/boardScene.ts'
 import { loadQuestSections } from '../../packages/core/src/quest/Quest.ts'
 import { bundleQuest } from '../../packages/core/src/quest/questAdapter.ts'
 import { QuestSession } from '../../packages/core/src/quest/QuestSession.ts'
@@ -44,6 +54,9 @@ setLogSink((m) => warnings.push(m))
 // --- content -------------------------------------------------------------
 const ctx = headlessContext({
   importPath: join(homedir(), '.cache/valkyrie-web-port/ffg/MoM-import/import'),
+  // A Mansions tile is 1024 pixels across 3.5 squares; without this every
+  // tile divides by zero and lands at NaN.
+  tilePixelPerSquare: TILE_PIXELS_PER_SQUARE.MoM,
   resolveTextureFile: (name) => {
     for (const e of WEB_TEXTURE_EXTENSIONS) if (existsSync(name + e)) return name + e
     return existsSync(name) ? name : null
@@ -185,6 +198,63 @@ console.log(`round                   : ${session.runtime.vars.getValue('#round')
 console.log(`items held              : ${session.runtime.items().length}`)
 console.log(`log entries             : ${session.runtime.log.length}`)
 console.log(`quest ended             : ${ended}`)
+// --- what the board would draw ------------------------------------------
+const tileSides = new Map(content.getAll(TileSideData))
+const tokenArt = new Map(content.getAll(TokenData))
+const sources = {
+  onGrid: false,
+  tile: (name) => {
+    const component = components.get(name)
+    const side = tileSides.get(component?.tileSideName ?? '')
+    if (side === undefined) return null
+    const file = ctx.resolveTextureFile(side.image)
+    if (file === null) return null
+    // The real pixel size needs a decode; the check only needs the geometry to
+    // be computable, so a nominal size is enough here.
+    return {
+      image: file,
+      pixelsPerSquare: side.pxPerSquare,
+      aspect: side.aspect,
+      top: side.top,
+      left: side.left,
+      imageWidth: 1024,
+      imageHeight: 1024,
+    }
+  },
+  token: (name) => {
+    const component = components.get(name)
+    const art = tokenArt.get(component?.tokenName ?? '')
+    if (art === undefined) return null
+    const file = ctx.resolveTextureFile(art.image)
+    if (file === null) return null
+    return {
+      image: file,
+      ...(art.width > 0 && art.height > 0
+        ? { crop: { x: art.x, y: art.y, width: art.width, height: art.height } }
+        : {}),
+      width: 1,
+      height: 1,
+    }
+  },
+  monster: () => null,
+  onWarning: (m) => warnings.push(m),
+}
+const scene = buildScene(session.runtime.boardItems(), session.runtime.monsters, sources)
+const bounds = sceneBounds(scene)
+const withArt = scene.filter((s) => s.source !== null).length
+console.log(`scene items             : ${scene.length} (${withArt} with art)`)
+if (bounds !== null) {
+  console.log(
+    `board extent            : x ${bounds.min.x.toFixed(1)}..${bounds.max.x.toFixed(1)}, ` +
+      `y ${bounds.min.y.toFixed(1)}..${bounds.max.y.toFixed(1)}`,
+  )
+}
+const broken = scene.filter(
+  (s) => !Number.isFinite(s.placed.centre.x) || !Number.isFinite(s.placed.centre.y),
+)
+console.log(`items with a bad position: ${broken.length}`)
+for (const b of broken.slice(0, 3)) console.log(`    ${b.id}`)
+
 console.log(`warnings                : ${warnings.length}`)
 for (const w of [...new Set(warnings)].slice(0, 6)) console.log(`    ${w}`)
 

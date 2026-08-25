@@ -44,6 +44,8 @@ export type { SelectionListOptions, SelectionList } from './selectionList.js'
 export { BoardCamera, DEFAULT_LIMITS } from './camera.js'
 export type { CameraLimits } from './camera.js'
 export { board, Layer } from './board.js'
+export { buildScene, sceneBounds } from './boardScene.js'
+export type { SceneItem, SceneSources, TileArt, TokenArt } from './boardScene.js'
 export type { Board, BoardItem, BoardOptions } from './board.js'
 
 export { eventDialog } from './screens/eventDialog.js'

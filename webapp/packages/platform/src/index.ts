@@ -155,3 +155,6 @@ export {
 } from './unityBundle.js'
 export type { BundleHeader, BundleEntry } from './unityBundle.js'
 export { decompressLz4Block, Lz4Error } from './lz4.js'
+
+export { TextureCache } from './textures.js'
+export type { Crop, Texture, TextureCacheOptions, TextureReader } from './textures.js'
