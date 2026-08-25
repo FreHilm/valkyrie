@@ -1,0 +1,18 @@
+{
+  "name": "@valkyrie/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Engine-free Valkyrie core: content model, quest data and rules. No browser or Node APIs.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build"
+  }
+}
