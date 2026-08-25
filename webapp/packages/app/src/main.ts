@@ -59,6 +59,7 @@ import {
 } from '@valkyrie/platform'
 import type { Crop, PickedDirectory, StorageManagerLike } from '@valkyrie/platform'
 import { libraryPaths, startQuest, surveyLibrary } from './library.js'
+import { questArt } from './questArt.js'
 import { formatBytes, storageReport } from './storage.js'
 import { persistenceMessage, requestPersistence } from './persistence.js'
 import { watchForUpdate } from './serviceWorker.js'
@@ -497,7 +498,8 @@ async function play(
   paths: ReturnType<typeof libraryPaths>,
   questPath: string,
 ): Promise<void> {
-  const { session, resolveTexture } = await startQuest(fs, paths, questPath)
+  const { session, resolveTexture, content, components, gameType, pixelsPerSquare } =
+    await startQuest(fs, paths, questPath)
   session.runtime.heroes.push(
     { heroName: 'HeroAshcanPete', activated: false },
     { heroName: 'HeroAgnesBaker', activated: false },
@@ -514,17 +516,30 @@ async function play(
     },
   })
 
+  // A tile's board size comes from its image's pixel size, which is only known
+  // once decoded — so sizes are recorded as they arrive and the scene is built
+  // again, which is what puts the tiles down.
+  const sizes = new Map<string, { width: number; height: number }>()
+
   const screen = playScreen({
     session,
-    sources: {
-      onGrid: false,
-      // Art wiring for tiles and tokens lands with the content lookup; the
-      // board places and hit-tests them either way.
-      tile: () => null,
-      token: () => null,
-      monster: () => null,
+    sources: questArt({
+      content,
+      components,
+      resolveTexture,
+      sizeOf: (path) => sizes.get(path) ?? null,
+      gameType,
+      pixelsPerSquare,
+    }),
+    loadTexture: async (path: string, crop?: Crop) => {
+      const file = resolveTexture(path) ?? path
+      const image = await textures.load(file, crop)
+      if (image !== null && !sizes.has(path)) {
+        sizes.set(path, { width: image.width, height: image.height })
+        screen.refresh()
+      }
+      return image
     },
-    loadTexture: (path: string, crop?: Crop) => textures.load(resolveTexture(path) ?? path, crop),
   })
 
   show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))

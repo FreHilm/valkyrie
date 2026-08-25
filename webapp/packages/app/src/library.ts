@@ -11,7 +11,7 @@
 import { loadContent, loadQuest, textureResolver } from '@valkyrie/platform'
 import type { FileSystem, StoragePaths } from '@valkyrie/platform'
 import { bundleQuest, QuestSession } from '@valkyrie/core'
-import type { TraitedMonster } from '@valkyrie/core'
+import type { ContentData, QuestComponent, TraitedMonster } from '@valkyrie/core'
 
 export interface QuestEntry {
   /** Directory under the quest root. */
@@ -93,6 +93,12 @@ export interface StartedQuest {
   session: QuestSession
   /** Resolves a content image path to a file that exists. */
   resolveTexture: (name: string) => string | null
+  /** The loaded content, for looking up what each board item looks like. */
+  content: ContentData
+  components: ReadonlyMap<string, QuestComponent>
+  gameType: 'MoM' | 'D2E'
+  /** The tile scale in force, for sizes given as "Original". */
+  pixelsPerSquare: number
 }
 
 /**
@@ -143,5 +149,9 @@ export async function startQuest(
   return {
     session,
     resolveTexture: await textureResolver(fs, [paths.content, paths.imported, questPath]),
+    content: content.content,
+    components: quest.components,
+    gameType,
+    pixelsPerSquare: content.context.tilePixelPerSquare,
   }
 }
