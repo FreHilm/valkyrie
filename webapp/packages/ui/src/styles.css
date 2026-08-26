@@ -960,6 +960,32 @@ body {
   outline-offset: 2px;
 }
 
+/* Missing content, said over the board it is missing from. */
+.vk-play__notices {
+  position: absolute;
+  /* Bottom left, clear of both the dialog — which anchors to the top — and
+     the phase buttons, which sit centred above it. */
+  bottom: calc(var(--u) * 0.4);
+  left: calc(var(--u) * 0.4);
+  max-width: min(calc(100% - var(--u) * 12), calc(var(--u) * 20));
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.2);
+  pointer-events: none;
+}
+.vk-play__notices:empty {
+  display: none;
+}
+.vk-play__notice {
+  margin: 0;
+  padding: calc(var(--u) * 0.3) calc(var(--u) * 0.5);
+  font-size: var(--vk-text-small);
+  color: var(--vk-text);
+  background: var(--vk-surface);
+  border: 1px solid var(--vk-danger);
+  border-radius: var(--vk-radius);
+}
+
 .vk-play__controls {
   position: absolute;
   left: 0;

@@ -49,6 +49,8 @@ export interface ArtOptions {
   gameType: 'MoM' | 'D2E'
   /** Board squares per image pixel, for sizes given as "Original". */
   pixelsPerSquare: number
+  /** Reports content a scenario needs and the player has not got. */
+  onWarning?: (message: string) => void
 }
 
 /**
@@ -91,6 +93,7 @@ export function questArt(options: ArtOptions): SceneSources {
   const { components, content, resolveTexture, sizeOf } = options
 
   return {
+    ...(options.onWarning === undefined ? {} : { onWarning: options.onWarning }),
     onGrid: options.gameType === 'D2E',
 
     tile: (name: string): TileArt | null => {
@@ -99,7 +102,18 @@ export function questArt(options: ArtOptions): SceneSources {
 
       // `customImage` overrides the side's art without changing its geometry.
       const side = tileSide(content, component.tileSideName)
-      if (side === null) return null
+      if (side === null) {
+        // `Quest.Tile` calls `Application.Quit()` here — the tile is part of
+        // an expansion that is not loaded, and without it there is no board.
+        // Drawing nothing and saying nothing is the one outcome that leaves a
+        // player with no idea what happened.
+        options.onWarning?.(
+          `Tile ${name} needs ${component.tileSideName}, which is not in the ` +
+            `content you have selected. If you own the expansion it comes ` +
+            `from, turn it on in Content.`,
+        )
+        return null
+      }
 
       const image = resolveTexture(
         component.customImage.length > 0 ? component.customImage : side.image,

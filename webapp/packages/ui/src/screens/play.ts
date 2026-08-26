@@ -117,6 +117,13 @@ export interface PlayOptions {
    * new quest has to be read and loaded — so it says so and stops drawing.
    */
   onChangeQuest?: (path: string) => void
+  /**
+   * Content the scenario needs and the player has not got.
+   *
+   * Shown over the board rather than logged: the symptom is a board with
+   * pieces missing from it, which a player has no other way to make sense of.
+   */
+  notices?: () => readonly string[]
   /** The monsters in play, for the strip down the edge of the board. */
   monsterList?: () => readonly MonsterEntry[]
   /**
@@ -202,6 +209,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
   }
 
   const monsters = el('div', { class: 'vk-play__monsters' })
+  const notices = el('div', { class: 'vk-play__notices', attrs: { role: 'status' } })
   const monster = monsterDialog({ ...rich, onLog: () => {} })
 
   const events = eventDialog(rich)
@@ -228,7 +236,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
   // dialog covers it rather than the other way round.
   const element = panel({
     class: 'vk-play',
-    children: [surface, questUi.element, monsters, overlay, controls],
+    children: [surface, questUi.element, monsters, notices, overlay, controls],
   })
 
   /** Art already requested, so a redraw does not re-request it. */
@@ -277,6 +285,16 @@ export function playScreen(options: PlayOptions): PlayScreen {
     view.setItems(scene)
     questUi.setElements(options.questUi?.() ?? [])
     drawMonsterStrip()
+    drawNotices()
+  }
+
+  /** Whatever the board could not draw, said once each. */
+  function drawNotices(): void {
+    const messages = options.notices?.() ?? []
+    clear(notices)
+    for (const message of messages) {
+      notices.append(el('p', { class: 'vk-play__notice', text: message }))
+    }
   }
 
   /**

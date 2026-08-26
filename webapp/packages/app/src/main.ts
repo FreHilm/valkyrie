@@ -999,13 +999,23 @@ async function play(
   // time anything is drawn, so the renderer needs the table read backwards to
   // know what it is looking at.
   const glyphs = symbolNames(gameType)
+  /** Content the scenario asked for and this player does not have. */
+  const missing = new Set<string>()
   const screen = playScreen({
     session,
     rich: { symbolOf: (character) => glyphs.get(character) ?? null },
+    notices: () => [...missing],
     sources: questArt({
       content,
       components,
       resolveTexture,
+      onWarning: (message) => {
+        // Once each: the board is rebuilt on every refresh and would
+        // otherwise repeat the same line for every redraw.
+        if (missing.has(message)) return
+        missing.add(message)
+        session.runtime.log.add(new LogEntry(message, true))
+      },
       sizeOf: (path) => sizes.get(path) ?? null,
       questPath,
       gameType,
