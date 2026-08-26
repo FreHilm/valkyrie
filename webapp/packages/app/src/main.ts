@@ -65,7 +65,8 @@ import { devManifest, loadFromDevServer } from './devLoad.js'
 import { clearStage, lastStage, stage } from './trace.js'
 import { browsableQuests, byRecency, fetchQuestIndex, packageUrl } from './questIndex.js'
 import { libraryPaths, startQuest, surveyLibrary } from './library.js'
-import { questArt, questUiElements, tileImages } from './questArt.js'
+import { monsterProfile, questArt, questUiElements, tileImages } from './questArt.js'
+import { monsterDialogView } from './monsterView.js'
 import { formatBytes, storageReport } from './storage.js'
 import { persistenceMessage, requestPersistence } from './persistence.js'
 import { watchForUpdate } from './serviceWorker.js'
@@ -406,7 +407,7 @@ function monsterDemo(): void {
         },
       },
       attackTypes: attackTypes(type, attacks),
-      onAttack: (chosen) => {
+      onAttack: (chosen: string) => {
         const text = randomAttack(type, chosen, attacks, (n) => Math.floor(Math.random() * n))
         return text === null ? null : named(text.translate())
       },
@@ -896,9 +897,38 @@ async function play(
       components,
       resolveTexture,
       sizeOf: (path) => sizes.get(path) ?? null,
+      questPath,
       gameType,
       pixelsPerSquare,
     }),
+    monsterList: () =>
+      session.runtime.monsters.map((instance, index) => {
+        const profile = monsterProfile(content, components, instance.monsterName, questPath)
+        const art = profile === null ? null : resolveTexture(profile.resolved.image)
+        return {
+          index,
+          name: profile?.resolved.name.translate() ?? instance.monsterName,
+          image: art === null ? null : imageUrl(art),
+          activated: instance.activated,
+        }
+      }),
+    monsterView: (index, close) =>
+      monsterDialogView(
+        {
+          session,
+          content,
+          components,
+          questPath,
+          gameType,
+          resolveTexture,
+          imageUrl,
+          close,
+          refresh: () => {
+            screen.refresh()
+          },
+        },
+        index,
+      ),
     questUi: () =>
       questUiElements({
         content,

@@ -208,6 +208,7 @@ const sources = questArt({
   // Every image reports 1024x1024 here; the check is that geometry resolves,
   // not that the pixels are right — the dds harness covers those.
   sizeOf: (path) => (resolveTexture(path) === null ? null : { width: 1024, height: 1024 }),
+  questPath: dir,
   gameType: 'MoM',
   pixelsPerSquare: TILE_PIXELS_PER_SQUARE.MoM,
 })

@@ -12,18 +12,26 @@
  */
 
 import {
+  contentMonster,
   CustomMonster,
   ImageData,
   MonsterData,
   MPlace,
   QuestUI,
+  resolveQuestMonster,
   TextAlignment,
   Tile,
   TileSideData,
   Token,
   TokenData,
 } from '@valkyrie/core'
-import type { ContentData, QuestComponent, StringKey } from '@valkyrie/core'
+import type {
+  BaseMonsterView,
+  ContentData,
+  QuestComponent,
+  ResolvedMonster,
+  StringKey,
+} from '@valkyrie/core'
 import type { Crop } from '@valkyrie/platform'
 import type { QuestUiElement, SceneSources, TileArt, TokenArt } from '@valkyrie/ui'
 
@@ -36,6 +44,8 @@ export interface ArtOptions {
   /** Resolves a content image name to a file that exists. */
   resolveTexture: (name: string) => string | null
   sizeOf: SizeLookup
+  /** The scenario's directory, which its own art is named relative to. */
+  questPath?: string
   gameType: 'MoM' | 'D2E'
   /** Board squares per image pixel, for sizes given as "Original". */
   pixelsPerSquare: number
@@ -138,7 +148,8 @@ export function questArt(options: ArtOptions): SceneSources {
     },
 
     monster: (monsterName: string): TokenArt | null => {
-      const image = resolveTexture(monsterImage(content, components, monsterName) ?? '')
+      const profile = monsterProfile(content, components, monsterName, options.questPath ?? '')
+      const image = resolveTexture(profile?.resolved.imagePlace ?? '')
       if (image === null) return null
       const place = components.get(monsterName)
       const tokenSize = place instanceof MPlace ? place.tokenSize : 'small'
@@ -185,24 +196,6 @@ function tokenData(
     height: token.height,
     pxPerSquare: token.pxPerSquare,
   }
-}
-
-/** A monster's board art: `imagePlace` where it exists, else its portrait. */
-function monsterImage(
-  content: ContentData,
-  components: ReadonlyMap<string, QuestComponent>,
-  monsterName: string,
-): string | null {
-  const quest = components.get(monsterName)
-  if (quest instanceof CustomMonster) {
-    if (quest.imagePlace.length > 0) return quest.imagePlace
-    if (quest.imagePath.length > 0) return quest.imagePath
-    return monsterImage(content, components, quest.baseMonster)
-  }
-
-  const monster = content.tryGet(MonsterData, monsterName)
-  if (monster === undefined) return null
-  return monster.imagePlace.length > 0 ? monster.imagePlace : monster.image
 }
 
 /**
@@ -307,4 +300,88 @@ export function questUiElements(options: QuestUiOptions): QuestUiElement[] {
   }
 
   return built
+}
+
+/** Everything the monster dialog needs about one monster in play. */
+export interface MonsterProfile {
+  resolved: ResolvedMonster
+  /** The `CustomMonster` behind it, when a scenario defined this monster. */
+  custom: CustomMonster | null
+}
+
+/**
+ * Resolves a monster instance to its type, quest overrides included.
+ *
+ * `Quest.Monster` holds a `MonsterData` that is either a content section or a
+ * `QuestMonster` standing in for one, and every dialog reads it without caring
+ * which. This is that same join.
+ */
+export function monsterProfile(
+  content: ContentData,
+  components: ReadonlyMap<string, QuestComponent>,
+  monsterName: string,
+  questPath: string,
+): MonsterProfile | null {
+  const base = (name: string): BaseMonsterView | undefined => {
+    const data = content.tryGet(MonsterData, name)
+    if (data === undefined) return undefined
+    return {
+      name: data.name,
+      info: data.info,
+      traits: data.traits,
+      image: data.image,
+      activations: data.activations,
+      healthBase: data.healthBase,
+      healthPerHero: data.healthPerHero,
+      horror: data.horror,
+      awareness: data.awareness,
+    }
+  }
+
+  const custom = components.get(monsterName)
+  if (custom instanceof CustomMonster) {
+    return {
+      custom,
+      resolved: resolveQuestMonster(
+        {
+          sectionName: monsterName,
+          baseMonster: custom.baseMonster,
+          monsterName: custom.monsterName,
+          info: custom.info,
+          traits: custom.traits,
+          imagePath: custom.imagePath,
+          imagePlace: custom.imagePlace,
+          activations: custom.activations,
+          healthBase: custom.healthBase,
+          healthPerHero: custom.healthPerHero,
+          healthDefined: custom.healthDefined,
+          horror: custom.horror,
+          horrorDefined: custom.horrorDefined,
+          awareness: custom.awareness,
+          awarenessDefined: custom.awarenessDefined,
+        },
+        base(custom.baseMonster),
+        questPath,
+        (key) => key.keyExists(),
+      ),
+    }
+  }
+
+  const data = content.tryGet(MonsterData, monsterName)
+  if (data === undefined) return null
+  return {
+    custom: null,
+    resolved: contentMonster(monsterName, {
+      name: data.name,
+      info: data.info,
+      traits: data.traits,
+      image: data.image,
+      imagePlace: data.imagePlace,
+      activations: data.activations,
+      healthBase: data.healthBase,
+      healthPerHero: data.healthPerHero,
+      horror: data.horror,
+      awareness: data.awareness,
+    }),
+  }
 }
