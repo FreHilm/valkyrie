@@ -15,7 +15,7 @@ import { ActivationInstance } from './ActivationInstance.js'
 import type { ActivationView } from './ActivationInstance.js'
 import { EventManager } from './EventManager.js'
 import { packVariables } from '../content/packSelection.js'
-import type { CameraCommand } from './EventManager.js'
+import type { AudioRequest, CameraCommand } from './EventManager.js'
 import { QuestRuntime } from './QuestRuntime.js'
 import type { MonsterInstance } from './QuestRuntime.js'
 import { MoMPhase, RoundControllerMoM, roundToInt } from './RoundController.js'
@@ -125,7 +125,8 @@ export interface SessionOptions {
   localization?: Localization
   /** `Random.Range(0, n)`, injectable so a session can be replayed. */
   random?: (count: number) => number
-  playAudio?: (name: string) => void
+  /** A sound the quest asked for: an effect, a trait, or a music playlist. */
+  playAudio?: (request: AudioRequest) => void
   save?: () => void
 }
 

@@ -33,6 +33,8 @@ export interface EventDefinition {
   operations?: readonly VarOperation[]
   /** `audio`: a sound played when the event runs. */
   audio?: string
+  /** `music`: replaces the background playlist while this event stands. */
+  music?: readonly string[]
   /** `randomEvents`: pick one chained event at random rather than the first. */
   randomEvents: boolean
   /** `xposition`/`yposition`, when the event carries them. */
@@ -45,6 +47,19 @@ export interface EventDefinition {
   /** A `UI` component's position places the element, not the camera. */
   isUi?: boolean
 }
+
+/**
+ * A sound to play.
+ *
+ * `effect` names an `Audio` content section, or a file beside the quest when
+ * no section matches. `trait` is a category — `newround`, `defeated` — and one
+ * of the sounds carrying it is chosen at random. `music` replaces the
+ * background playlist.
+ */
+export type AudioRequest =
+  | { kind: 'effect'; name: string }
+  | { kind: 'trait'; trait: string }
+  | { kind: 'music'; names: readonly string[] }
 
 /** What an event asks of the camera. `CameraController`'s three setters. */
 export type CameraCommand =
@@ -82,7 +97,14 @@ export interface EventContext {
   /** Presents an event and resolves when the player answers with a button. */
   present?: (event: EventDefinition) => void
   /** Plays a sound named by the event. */
-  playAudio?: (name: string) => void
+  /**
+   * A sound the quest asked for.
+   *
+   * `Play(file)` and `PlayTrait(trait)` are different things in the C# — one
+   * names a sound, the other picks at random among every sound carrying a
+   * trait — so which is meant is said rather than guessed from the string.
+   */
+  playAudio?: (request: AudioRequest) => void
   /** `Random.Range(0, n)`, injectable so tests are deterministic. */
   random?: (count: number) => number
   /**
@@ -305,7 +327,13 @@ export class EventManager {
    */
   private applyEffects(event: EventDefinition): void {
     if (event.audio !== undefined && event.audio.length > 0) {
-      this.context.playAudio?.(event.audio)
+      this.context.playAudio?.({ kind: 'effect', name: event.audio })
+    }
+
+    // `EventManager.cs:196`. An empty list leaves the playlist alone, which is
+    // what lets music carry across the events between two that set it.
+    if (event.music !== undefined && event.music.length > 0) {
+      this.context.playAudio?.({ kind: 'music', names: event.music })
     }
 
     if (event.operations !== undefined) {

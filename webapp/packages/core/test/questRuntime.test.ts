@@ -12,7 +12,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { QuestRuntime } from '../src/quest/QuestRuntime.js'
 import type { QuestComponentData } from '../src/quest/QuestRuntime.js'
 import { EventManager } from '../src/quest/EventManager.js'
-import type { EventDefinition } from '../src/quest/EventManager.js'
+import type { AudioRequest, EventDefinition } from '../src/quest/EventManager.js'
 import { VarOperation } from '../src/quest/VarTests.js'
 
 const component = (
@@ -303,14 +303,23 @@ describe('events driving the runtime', () => {
 
   function wire(events: EventDefinition[], runtime: QuestRuntime) {
     const played: string[] = []
+    const music: readonly string[][] = []
+    const requests: AudioRequest[] = []
     return {
       played,
+      music,
+      requests,
       manager: new EventManager({
         vars: runtime.vars,
         log: runtime.log,
         events: new Map(events.map((e) => [e.sectionName, e])),
         runtime,
-        playAudio: (name) => played.push(name),
+        // The request says which kind of sound it is; an event's `audio`
+        // names one, rather than naming a category to pick from.
+        playAudio: (request) => {
+          requests.push(request)
+          if (request.kind === 'effect') played.push(request.name)
+        },
       }),
     }
   }
@@ -397,6 +406,30 @@ describe('events driving the runtime', () => {
     manager.queue('Bang')
 
     expect(played).toEqual(['DoorSlam'])
+  })
+
+  it('sets the music an event names', () => {
+    const runtime = new QuestRuntime({ components: components() })
+    const { manager, requests } = wire(
+      [event({ sectionName: 'Creep', music: ['AudioAtmosphere1', 'AudioAtmosphere2'] })],
+      runtime,
+    )
+    manager.queue('Creep')
+
+    expect(requests).toContainEqual({
+      kind: 'music',
+      names: ['AudioAtmosphere1', 'AudioAtmosphere2'],
+    })
+  })
+
+  it('leaves the playlist alone for an event that names no music', () => {
+    // `EventManager.cs:196` only touches it when the list is non-empty, which
+    // is what carries a track across the events between two that set one.
+    const runtime = new QuestRuntime({ components: components() })
+    const { manager, requests } = wire([event({ sectionName: 'Talk', music: [] })], runtime)
+    manager.queue('Talk')
+
+    expect(requests.filter((r) => r.kind === 'music')).toEqual([])
   })
 
   it('does nothing to the board for an event with no effects', () => {

@@ -225,7 +225,7 @@ export {
 } from './quest/symbols.js'
 export { packsToLoad, packVariables } from './content/packSelection.js'
 export type { SelectablePack } from './content/packSelection.js'
-export type { CameraCommand } from './quest/EventManager.js'
+export type { AudioRequest, CameraCommand } from './quest/EventManager.js'
 export { needsRichText, parseRichText } from './quest/richText.js'
 export type { RichSpan, RichStyle } from './quest/richText.js'
 export type { SymbolContext } from './quest/symbols.js'

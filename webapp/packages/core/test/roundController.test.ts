@@ -116,7 +116,9 @@ function harness(
     questActivations: new Map(),
     present: (request) => requests.push(request),
     random: (count) => (count <= 0 ? 0 : (draws[cursor++] ?? 0) % count),
-    playAudio: (trait) => audio.push(trait),
+    playAudio: (request) => {
+      if (request.kind === 'trait') audio.push(request.trait)
+    },
     save: () => {
       state.saves++
     },

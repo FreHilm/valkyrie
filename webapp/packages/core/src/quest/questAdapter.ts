@@ -134,6 +134,7 @@ export function questEvents(
     }
     if (component.operations !== null) definition.operations = component.operations
     if (component.audio.length > 0) definition.audio = component.audio
+    if (component.music.length > 0) definition.music = component.music
     if (component.location !== null) {
       definition.location = component.location
       definition.locationSpecified = component.locationSpecified

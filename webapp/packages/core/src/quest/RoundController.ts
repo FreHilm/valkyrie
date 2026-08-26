@@ -10,6 +10,7 @@
  * is what lets the whole loop be tested.
  */
 
+import type { AudioRequest } from './EventManager.js'
 import type { HeroInstance, MonsterInstance, QuestRuntime } from './QuestRuntime.js'
 import { ActivationInstance } from './ActivationInstance.js'
 import type { ActivationTextContext, ActivationView } from './ActivationInstance.js'
@@ -81,7 +82,7 @@ export interface RoundContext {
   /** `Random.Range(0, n)`. */
   random: (count: number) => number
   /** `audioControl.PlayTrait`. */
-  playAudio?: (trait: string) => void
+  playAudio?: (request: AudioRequest) => void
   /** `SaveManager.Save(0)`. */
   save?: () => void
   /** Renders `{val:ROUND}` and the phase names for the quest log. */
@@ -262,7 +263,7 @@ export class RoundController {
     this.context.runtime.resetActivations()
     this.advanceRoundCounter()
 
-    this.context.playAudio?.('newround')
+    this.context.playAudio?.({ kind: 'trait', trait: 'newround' })
     this.context.events.triggerType('StartRound')
     this.context.save?.()
     return true
@@ -511,7 +512,7 @@ export class RoundControllerMoM extends RoundController {
     runtime.log.add(new LogEntry(this.translate('PHASE_INVESTIGATOR')))
 
     this.phase = MoMPhase.investigator
-    this.context.playAudio?.('newround')
+    this.context.playAudio?.({ kind: 'trait', trait: 'newround' })
 
     if (
       runtime.vars.getValue('#eliminatedprev') > 0 &&
@@ -556,7 +557,7 @@ export class RoundControllerMoM extends RoundController {
   defeated(monster: MonsterInstance): void {
     const { runtime, events } = this.context
     runtime.removeMonster(monster)
-    this.context.playAudio?.('defeated')
+    this.context.playAudio?.({ kind: 'trait', trait: 'defeated' })
 
     events.current = null
     events.triggerType(`Defeated${monster.monsterName}`)
