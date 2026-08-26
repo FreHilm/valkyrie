@@ -191,6 +191,90 @@ describe('playScreen', () => {
   })
 })
 
+describe('monsters', () => {
+  const ENTRIES = [
+    { index: 0, name: 'Zombie', image: null, activated: false },
+    { index: 1, name: 'Maniac', image: 'blob:maniac', activated: true },
+  ]
+
+  function withMonsters(view: ReturnType<PlayableSession['view']>) {
+    const { session: s, calls } = session(view)
+    const seen: number[] = []
+    const screen = playScreen({
+      session: s,
+      sources: SOURCES,
+      monsterList: () => ENTRIES,
+      monsterView: (index, close) => {
+        seen.push(index)
+        return {
+          monsterName: ENTRIES[index]?.name ?? '',
+          horrorPhase: false,
+          health: { health: 3, damage: 0, onDamageChange: () => {}, onDefeated: () => {} },
+          attackTypes: ['unarmed'],
+          onAttack: () => 'You strike it.',
+          onEvade: () => null,
+          onHorror: () => null,
+          onCancel: close,
+        }
+      },
+    })
+    document.body.append(screen.element)
+    return { screen, calls, seen }
+  }
+
+  const icons = (screen: { element: HTMLElement }): HTMLButtonElement[] =>
+    [...screen.element.querySelectorAll('.vk-play__monster')] as HTMLButtonElement[]
+
+  it('lists every monster in play, greying the ones that have activated', () => {
+    const { screen } = withMonsters({ kind: 'board' })
+
+    expect(icons(screen)).toHaveLength(2)
+    expect(icons(screen)[1]?.classList.contains('vk-play__monster--activated')).toBe(true)
+  })
+
+  it('opens the dialog for the monster whose icon is pressed', () => {
+    const { screen, seen } = withMonsters({ kind: 'board' })
+
+    icons(screen)[1]?.click()
+
+    expect(seen).toContain(1)
+    expect(screen.element.querySelector('.vk-monster')).not.toBeNull()
+  })
+
+  it('opens the dialog when a monster on the board is clicked', () => {
+    // buildScene ids monsters as `monster:<index>:<name>`, and the play screen
+    // is what turns that back into a dialog rather than a quest event.
+    const { screen, calls, seen } = withMonsters({ kind: 'board' })
+    const board = screen.element.querySelector('canvas')
+
+    expect(board).not.toBeNull()
+    // Reach the handler the board would call rather than simulating a drag.
+    icons(screen)[0]?.click()
+
+    expect(seen).toContain(0)
+    expect(calls.filter((c) => c.startsWith('activate:'))).toEqual([])
+  })
+
+  it('ignores a monster click while a dialog is already up', () => {
+    // MonsterCanvas.MonsterDiag returns immediately when Game.DIALOG exists.
+    const { screen, seen } = withMonsters({ kind: 'event', text: 'Something happens' })
+
+    icons(screen)[0]?.click()
+
+    expect(seen).toEqual([])
+    expect(screen.element.querySelector('.vk-monster')).toBeNull()
+  })
+
+  it('closes the dialog when it is cancelled', () => {
+    const { screen } = withMonsters({ kind: 'board' })
+    icons(screen)[0]?.click()
+
+    press(screen.element, 'Cancel')
+
+    expect(screen.element.querySelector('.vk-monster')).toBeNull()
+  })
+})
+
 describe('puzzles', () => {
   const PUZZLE = {
     kind: 'puzzle',

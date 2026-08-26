@@ -13,6 +13,8 @@
 
 import { activationDialog } from './activationDialog.js'
 import { eventDialog } from './eventDialog.js'
+import { monsterDialog } from './monsterDialog.js'
+import type { MonsterDialogView } from './monsterDialog.js'
 import { board } from '../board.js'
 import { buildScene } from '../boardScene.js'
 import type { SceneItem, SceneSources } from '../boardScene.js'
@@ -71,6 +73,17 @@ const DEFAULT_STRINGS: PlayStrings = {
   loading: rawText('Loading art…'),
 }
 
+/** One entry in the monster strip, which is `MonsterCanvas`'s icon list. */
+export interface MonsterEntry {
+  /** Position in the runtime's monster list; the board uses it as an id too. */
+  index: number
+  name: string
+  /** Icon URL, or null while it is still resolving. */
+  image: string | null
+  /** `MonsterIcon.Update` greys out a monster that has already activated. */
+  activated: boolean
+}
+
 export interface PlayOptions {
   session: PlayableSession
   /** Where each board item's art comes from. */
@@ -95,6 +108,16 @@ export interface PlayOptions {
    * of them, and the event that dismisses it removes all three.
    */
   questUi?: () => readonly QuestUiElement[]
+  /** The monsters in play, for the strip down the edge of the board. */
+  monsterList?: () => readonly MonsterEntry[]
+  /**
+   * Builds the dialog for the monster at `index`.
+   *
+   * The health, the attacks and the text all come from content the play screen
+   * has no view of, so the application assembles it and this only decides when
+   * to show it.
+   */
+  monsterView?: (index: number, close: () => void) => MonsterDialogView | null
   /** Loads and crops an image; resolves to null when it is unavailable. */
   loadTexture?: (
     path: string,
@@ -124,14 +147,44 @@ export function playScreen(options: PlayOptions): PlayScreen {
         ? strings.boardLabel.value
         : 'Quest board',
     onSelect: (item) => {
-      // Monsters are not clickable targets for the event engine; everything
-      // else on the board is a component name the quest can fire.
-      if (item.id.startsWith('monster:')) return
+      // A monster opens its own dialog rather than firing an event: it is not
+      // a quest component, and `MonsterCanvas.MonsterDiag` is what a click on
+      // one reaches. Everything else on the board is a component name.
+      const monster = monsterIndex(item.id)
+      if (monster !== null) {
+        pickMonster(monster)
+        return
+      }
       session.activate(item.id)
       refresh()
     },
   })
   surface.append(view.element)
+
+  /** `monster:<index>:<name>`, as `buildScene` writes it. */
+  function monsterIndex(id: string): number | null {
+    if (!id.startsWith('monster:')) return null
+    const index = Number.parseInt(id.slice('monster:'.length), 10)
+    return Number.isNaN(index) ? null : index
+  }
+
+  /** Which monster's dialog is open, if any. */
+  let selected: number | null = null
+
+  /**
+   * `MonsterDiag` opens nothing while another dialog is up:
+   * `FindGameObjectWithTag(Game.DIALOG) != null` and it returns. Without the
+   * same guard a click during an event is remembered and the monster dialog
+   * appears on its own once the event closes.
+   */
+  function pickMonster(index: number): void {
+    if (session.view().kind !== 'board') return
+    selected = index
+    refresh()
+  }
+
+  const monsters = el('div', { class: 'vk-play__monsters' })
+  const monster = monsterDialog({ onLog: () => {} })
 
   const events = eventDialog()
   const activation = activationDialog({
@@ -155,7 +208,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
   // dialog covers it rather than the other way round.
   const element = panel({
     class: 'vk-play',
-    children: [surface, questUi.element, overlay, controls],
+    children: [surface, questUi.element, monsters, overlay, controls],
   })
 
   /** Art already requested, so a redraw does not re-request it. */
@@ -203,6 +256,34 @@ export function playScreen(options: PlayOptions): PlayScreen {
 
     view.setItems(scene)
     questUi.setElements(options.questUi?.() ?? [])
+    drawMonsterStrip()
+  }
+
+  /**
+   * The monster list down the edge of the board.
+   *
+   * `MonsterCanvas` draws it against the right edge of the screen, one icon
+   * per monster in play, greyed once that monster has activated this round.
+   */
+  function drawMonsterStrip(): void {
+    clear(monsters)
+    for (const entry of options.monsterList?.() ?? []) {
+      const icon = el('button', {
+        class: entry.activated
+          ? 'vk-play__monster vk-play__monster--activated'
+          : 'vk-play__monster',
+        attrs: { type: 'button', title: entry.name, 'aria-label': entry.name },
+      })
+      if (entry.image !== null) {
+        icon.append(el('img', { attrs: { src: entry.image, alt: '' } }))
+      } else {
+        icon.textContent = entry.name.slice(0, 2)
+      }
+      icon.addEventListener('click', () => {
+        pickMonster(entry.index)
+      })
+      monsters.append(icon)
+    }
   }
 
   function refresh(): void {
@@ -281,7 +362,26 @@ export function playScreen(options: PlayOptions): PlayScreen {
       return
     }
 
-    if (current.kind === 'ended') return
+    if (current.kind === 'ended') {
+      selected = null
+      return
+    }
+
+    // Only reached with the board clear, which is the state `MonsterDiag`
+    // requires; every quest screen above has already returned.
+    if (selected !== null) {
+      const close = (): void => {
+        selected = null
+        refresh()
+      }
+      const monsterState = options.monsterView?.(selected, close) ?? null
+      if (monsterState === null) selected = null
+      else {
+        monster.show(monsterState)
+        overlay.append(monster.element)
+        return
+      }
+    }
 
     // The board, with the two things a player can do that are not on it.
     controls.append(

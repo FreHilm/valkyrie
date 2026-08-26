@@ -112,7 +112,13 @@ export type {
   ImportSummary,
 } from './screens/import.js'
 export { playScreen } from './screens/play.js'
-export type { PlayScreen, PlayOptions, PlayStrings, PlayableSession } from './screens/play.js'
+export type {
+  MonsterEntry,
+  PlayScreen,
+  PlayOptions,
+  PlayStrings,
+  PlayableSession,
+} from './screens/play.js'
 export { monsterDialog } from './screens/monsterDialog.js'
 export type {
   MonsterDialog,
