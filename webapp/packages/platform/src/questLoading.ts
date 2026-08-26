@@ -74,6 +74,25 @@ export async function loadContent(fs: FileSystem, options: ContentOptions): Prom
     )
   }
 
+  // `GameSelectionScreen.loadLocalization` reads the imported text once, and
+  // skips the whole block when `ffg` is already registered. Without it every
+  // name the game itself ships — monsters, attacks, items — stays a raw key.
+  if (context.localization.selectDictionary('ffg') === null) {
+    const text = combine(options.importPath, 'text')
+    context.localization.addDictionary(
+      'ffg',
+      await readDictionary(fs, await ffgTextFiles(fs, text)),
+    )
+    // The Dunwich Horror data is a separate dictionary of its own.
+    context.localization.addDictionary(
+      'csh',
+      await readDictionary(
+        fs,
+        await matchingFiles(fs, text, /^SCENARIO_CULT_OF_SENTINEL_HILL_MAD22_.*\.txt$/),
+      ),
+    )
+  }
+
   const packs = await findPacks(fs, options.root)
   for (const packDir of packs) {
     const manifest = await packManifest(fs, packDir)
@@ -151,6 +170,26 @@ async function readDictionary(fs: FileSystem, files: readonly string[]): Promise
     dict.addData(await fs.readLines(file))
   }
   return dict
+}
+
+/**
+ * The imported `Localization_*.txt` files that hold the game's own text.
+ *
+ * The C# drops any whose *name* contains a digit: the import writes numbered
+ * companions alongside the per-language files, and reading them in corrupts
+ * the dictionary.
+ */
+async function ffgTextFiles(fs: FileSystem, dir: string): Promise<string[]> {
+  const files = await matchingFiles(fs, dir, /^Localization_.*\.txt$/)
+  return files.filter((path) => !/\d/.test(path.slice(path.lastIndexOf('/') + 1)))
+}
+
+/** Files in a directory whose name matches, or nothing when it is absent. */
+async function matchingFiles(fs: FileSystem, dir: string, name: RegExp): Promise<string[]> {
+  if (!(await fs.exists(dir))) return []
+  return (await fs.list(dir))
+    .filter((e) => e.kind !== 'directory' && name.test(e.path.slice(e.path.lastIndexOf('/') + 1)))
+    .map((e) => e.path)
 }
 
 /** Every `Localization*.txt` in a directory, or nothing when it is absent. */

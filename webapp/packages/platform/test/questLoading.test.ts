@@ -283,6 +283,40 @@ MONSTER_ZOMBIE,Zombie
     expect(ffg?.getValue('MONSTER_ZOMBIE')).toBe('Zombie')
   })
 
+  it('registers the imported game text as the ffg dictionary', async () => {
+    const fs = await localizedTree()
+    await fs.writeText('/import/text/Localization_en.txt', '.,English\nMONSTER_MANIAC,Maniac\n')
+
+    const loaded = await loadContent(fs, {
+      root: '/content',
+      importPath: '/import',
+      gameType: 'MoM',
+      localization: new Localization(),
+    })
+
+    expect(loaded.context.localization.selectDictionary('ffg')?.getValue('MONSTER_MANIAC')).toBe(
+      'Maniac',
+    )
+  })
+
+  it('skips the numbered companions the import writes beside them', async () => {
+    // GameSelectionScreen.cs:252 drops any file whose name contains a digit.
+    const fs = await localizedTree()
+    await fs.writeText('/import/text/Localization_en.txt', '.,English\nA,good\n')
+    await fs.writeText('/import/text/Localization_en_2.txt', '.,English\nB,bad\n')
+
+    const loaded = await loadContent(fs, {
+      root: '/content',
+      importPath: '/import',
+      gameType: 'MoM',
+      localization: new Localization(),
+    })
+
+    const ffg = loaded.context.localization.selectDictionary('ffg')
+    expect(ffg?.getValue('A')).toBe('good')
+    expect(ffg?.keyExists('B')).toBe(false)
+  })
+
   it("registers Valkyrie's own text as the val dictionary", async () => {
     const loaded = await loadContent(await localizedTree(), {
       root: '/content',
