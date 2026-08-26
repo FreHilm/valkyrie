@@ -24,6 +24,85 @@ const component = (
 const components = (...list: QuestComponentData[]): Map<string, QuestComponentData> =>
   new Map(list.map((c) => [c.sectionName, c]))
 
+describe('the # names that clear a whole class at once', () => {
+  const populated = (): QuestRuntime => {
+    const runtime = new QuestRuntime({
+      components: components(
+        component('TileHall', 'Tile'),
+        component('TokenDoor', 'Token'),
+        component('DoorMain', 'Door'),
+        component('UIJournal', 'UI'),
+        component('UIContinue', 'UI'),
+      ),
+    })
+    runtime.add(['TileHall', 'TokenDoor', 'DoorMain', 'UIJournal', 'UIContinue'])
+    return runtime
+  }
+
+  it('clears the whole board for #boardcomponents', () => {
+    // A scenario ends its opening cutscene with this; without it the cutscene
+    // stays on screen and the quest never reaches its board.
+    const runtime = populated()
+
+    runtime.remove(['#boardcomponents'])
+
+    expect(runtime.boardItems()).toEqual([])
+  })
+
+  it('clears only that kind for #uicomponents, #doors, #tiles and #tokens', () => {
+    const cases: [string, string[]][] = [
+      ['#uicomponents', ['TileHall', 'TokenDoor', 'DoorMain']],
+      ['#doors', ['TileHall', 'TokenDoor', 'UIJournal', 'UIContinue']],
+      ['#tiles', ['TokenDoor', 'DoorMain', 'UIJournal', 'UIContinue']],
+      ['#tokens', ['TileHall', 'DoorMain', 'UIJournal', 'UIContinue']],
+    ]
+
+    for (const [name, left] of cases) {
+      const runtime = populated()
+      runtime.remove([name])
+      expect(
+        runtime.boardItems().map((i) => i.name),
+        name,
+      ).toEqual(left)
+    }
+  })
+
+  it('clears every monster for #monsters, and says so', () => {
+    const runtime = new QuestRuntime({ components: components() })
+    runtime.spawnMonster('MonsterZombie', 'SpawnA')
+    runtime.spawnMonster('MonsterManiac', 'SpawnB')
+
+    runtime.remove(['#monsters'])
+
+    expect(runtime.monsters).toEqual([])
+    // Scenarios test this variable, so it has to keep step.
+    expect(runtime.vars.getValue('#monsters')).toBe(0)
+  })
+
+  it('gives back every quest item for #qitems', () => {
+    const runtime = new QuestRuntime({
+      components: components(component('QItemAxe', 'QItem'), component('QItemKey', 'QItem')),
+    })
+    runtime.itemSelect.set('QItemAxe', 'Axe')
+    runtime.itemSelect.set('QItemKey', 'Key')
+    runtime.add(['QItemAxe', 'QItemKey'])
+
+    runtime.remove(['#qitems'])
+
+    expect([...runtime.heldItems]).toEqual([])
+  })
+
+  it('does not treat a # name as a component to look up', () => {
+    // The C# tests each special name in turn and does nothing when none match,
+    // so an unrecognised one must not fall through and remove a real component.
+    const runtime = populated()
+
+    runtime.remove(['#somethingelse'])
+
+    expect(runtime.boardItems()).toHaveLength(5)
+  })
+})
+
 describe('board contents', () => {
   it('adds tiles, tokens, doors and UI to the board', () => {
     const runtime = new QuestRuntime({

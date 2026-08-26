@@ -29,6 +29,14 @@ export interface QuestComponentData {
 }
 
 /** Something currently on the board. */
+/** `Quest.Remove`'s `#` names that clear one kind of board component. */
+const GROUPED_REMOVALS: Record<string, readonly string[]> = {
+  '#uicomponents': ['UI'],
+  '#doors': ['Door'],
+  '#tiles': ['Tile'],
+  '#tokens': ['Token'],
+}
+
 export interface BoardItem {
   name: string
   component: QuestComponentData
@@ -171,6 +179,7 @@ export class QuestRuntime {
   /** `Quest.Remove`. Removing something absent is a no-op. */
   remove(names: readonly string[]): void {
     for (const name of names) {
+      if (this.removeGroup(name)) continue
       this.board.delete(name)
       const resolved = this.itemSelect.get(name)
       if (resolved !== undefined) {
@@ -178,6 +187,53 @@ export class QuestRuntime {
         this.itemInspect.delete(resolved)
       }
     }
+  }
+
+  /**
+   * The `#` names that clear a whole class of thing at once.
+   *
+   * A scenario ends its opening cutscene with `remove=#boardcomponents`, which
+   * is the only way it has of taking its own interface back off the board.
+   * Treating one of these as an ordinary component name removes nothing and
+   * leaves the scenario stuck on the screen it meant to dismiss.
+   *
+   * Returns whether the name was one of them, because the C# tests these
+   * before falling through to the by-name removal.
+   */
+  private removeGroup(name: string): boolean {
+    if (!name.startsWith('#')) return false
+
+    if (name === '#monsters') {
+      this.monsters.length = 0
+      this.vars.setValue('#monsters', 0)
+      return true
+    }
+
+    if (name === '#boardcomponents') {
+      this.board.clear()
+      return true
+    }
+
+    const types = GROUPED_REMOVALS[name]
+    if (types !== undefined) {
+      for (const [key, item] of this.board) {
+        if (types.includes(item.component.type)) this.board.delete(key)
+      }
+      return true
+    }
+
+    if (name === '#qitems') {
+      // Every item the quest granted, which is what `itemSelect` maps.
+      for (const resolved of this.itemSelect.values()) {
+        this.heldItems.delete(resolved)
+        this.itemInspect.delete(resolved)
+      }
+      return true
+    }
+
+    // An unknown `#` name is not a component either; the C# tests each in turn
+    // and does nothing when none match.
+    return true
   }
 
   /**
