@@ -198,6 +198,12 @@ export {
   questMonsterTypes,
 } from './quest/questAdapter.js'
 export type { QuestBundle } from './quest/questAdapter.js'
+export { contentMonster, resolveQuestMonster } from './quest/questMonster.js'
+export type {
+  BaseMonsterView,
+  CustomMonsterSection,
+  ResolvedMonster,
+} from './quest/questMonster.js'
 export { colourFromName, isColourValid, layoutQuestUi } from './quest/questUi.js'
 export type { QuestUiPlacement, UiRect, Viewport } from './quest/questUi.js'
 export { attackTypes, randomAttack } from './quest/monsterAttacks.js'
