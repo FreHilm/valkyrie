@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { StringKey, DictionaryI18n, defaultLocalization } from '@valkyrie/core'
 import { button, dialog, label, list, panel, searchBox } from '../src/components.js'
+import { el } from '../src/dom.js'
 import { selectionList } from '../src/selectionList.js'
 import { itemsFrom } from '../src/selectionList.js'
 import { rawText, text } from '../src/text.js'
@@ -42,6 +43,28 @@ describe('label', () => {
 
   it('renders raw content as given', () => {
     expect(label(rawText('Deep Vault')).textContent).toBe('Deep Vault')
+  })
+
+  describe('el', () => {
+    it('takes a class attribute written as one string', () => {
+      // `classList.add` throws on a token containing a space, so this used to
+      // take out the element and everything after it — in a browser only, since
+      // happy-dom accepts the token happily.
+      const node = el('div', { class: 'vk-shell vk-shell--menu' })
+
+      expect([...node.classList]).toEqual(['vk-shell', 'vk-shell--menu'])
+    })
+
+    it('takes them as a list too, splitting any that hold more than one', () => {
+      const node = el('div', { class: ['vk-a', 'vk-b vk-c'] })
+
+      expect([...node.classList]).toEqual(['vk-a', 'vk-b', 'vk-c'])
+    })
+
+    it('ignores an empty or whitespace-only class', () => {
+      expect([...el('div', { class: '' }).classList]).toEqual([])
+      expect([...el('div', { class: '   ' }).classList]).toEqual([])
+    })
   })
 
   // Sizing is a class, not an inline style, so it stays in the cascade.

@@ -34,8 +34,13 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   const node = document.createElement(tag)
 
   if (options.class !== undefined) {
-    const names = typeof options.class === 'string' ? [options.class] : options.class
-    node.classList.add(...names.filter((name) => name.length > 0))
+    // Split on whitespace: `classList.add` throws on a token containing a
+    // space, so "a b" — which is what a class attribute looks like everywhere
+    // else — took the element and everything after it out. happy-dom accepts
+    // it, so this only ever failed in a browser.
+    const given = typeof options.class === 'string' ? [options.class] : options.class
+    const names = given.flatMap((name) => name.split(/\s+/)).filter((name) => name.length > 0)
+    if (names.length > 0) node.classList.add(...names)
   }
   if (options.text !== undefined) node.textContent = options.text
 
