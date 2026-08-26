@@ -511,13 +511,27 @@ function readTextAsset(reader: Reader, info: ObjectInfo): TextAsset {
 }
 
 /** Resolves a `StreamingInfo` against the sibling resource files. */
+/**
+ * The name a streaming resource is known by.
+ *
+ * Unity records the path as "archive:/CAB-xxxx/name.resS" or as a bare
+ * filename, and the file it refers to is found by name rather than by
+ * location. Both the map and the lookup go through here, because keying by
+ * anything longer means a resource found in a nested directory can never be
+ * matched — which is how 729 of an install's 1183 textures came to import as
+ * empty when the importer was pointed at the bundle root rather than at the
+ * data directory inside it.
+ */
+export function resourceKey(path: string): string {
+  const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+  return cut === -1 ? path : path.slice(cut + 1)
+}
+
 export function resolveStreamData(
   info: StreamingInfo,
   resources: ReadonlyMap<string, Uint8Array>,
 ): Uint8Array {
-  // Unity records these as "archive:/CAB-xxxx/name.resS" or a bare filename.
-  const name = info.path.slice(info.path.lastIndexOf('/') + 1)
-  const file = resources.get(name)
+  const file = resources.get(resourceKey(info.path))
   if (file === undefined) return new Uint8Array(0)
   return file.subarray(info.offset, info.offset + info.size)
 }

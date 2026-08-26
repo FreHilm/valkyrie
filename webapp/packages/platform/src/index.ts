@@ -120,6 +120,7 @@ export {
   readObject,
   readSerializedFile,
   resolveStreamData,
+  resourceKey,
 } from './unityAssets.js'
 export type {
   ObjectInfo,

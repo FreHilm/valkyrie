@@ -7,6 +7,11 @@
  *
  *   node tools/ffg/run-import.mjs "<install>" [game] "<download cache>"
  *
+ * Point it at the *desktop* install. A wrapped iOS build has its data under
+ * `Wrapper/<name>.app/Data` and ships a fraction of the art — no box shots at
+ * all — so an import from one succeeds and quietly produces a smaller game
+ * than an import from the Steam or standalone build beside it.
+ *
  * The download cache is not optional in practice. Current builds keep almost
  * nothing in the install — MoM 2.1.6 fetches its art, audio and text on first
  * run — so importing the install alone yields a handful of textures and looks

@@ -18,6 +18,7 @@ import {
   readObject,
   readSerializedFile,
   resolveStreamData,
+  resourceKey,
 } from '../src/unityAssets.js'
 import {
   audioClipBody,
@@ -216,6 +217,24 @@ describe('resolveStreamData', () => {
     expect(resolveStreamData({ offset: 0, size: 4, path: 'missing.resS' }, resources)).toHaveLength(
       0,
     )
+  })
+})
+
+describe('resourceKey', () => {
+  // A texture names the file it streams from and never says where it sits, so
+  // both the map and the lookup have to reduce to the same name. Keying by
+  // anything longer left 729 of an install's 1183 textures importing as empty
+  // when the source was rooted above the data directory.
+  it('reduces a path to the file name', () => {
+    expect(resourceKey('sharedassets0.assets.resS')).toBe('sharedassets0.assets.resS')
+    expect(resourceKey('Wrapper/Game.app/Data/sharedassets0.assets.resS')).toBe(
+      'sharedassets0.assets.resS',
+    )
+    expect(resourceKey('archive:/CAB-abc123/resources.assets.resS')).toBe('resources.assets.resS')
+  })
+
+  it('handles a Windows-style path', () => {
+    expect(resourceKey('Game_Data\\resources.resource')).toBe('resources.resource')
   })
 })
 

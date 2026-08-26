@@ -28,6 +28,7 @@ import {
   readObject,
   readSerializedFile,
   resolveStreamData,
+  resourceKey,
 } from './unityAssets.js'
 import type { AudioAsset, TextAsset, TextureAsset } from './unityAssets.js'
 
@@ -162,7 +163,7 @@ function expand(
   const entries = readBundle(bytes)
   const resources = new Map(shared)
   for (const entry of entries) {
-    if (/\.(resource|resS)$/.test(entry.path)) resources.set(entry.path, entry.data)
+    if (/\.(resource|resS)$/.test(entry.path)) resources.set(resourceKey(entry.path), entry.data)
   }
 
   return entries
@@ -184,7 +185,10 @@ export async function importFfgApp(options: ImportOptions): Promise<ImportResult
   const resources = new Map<string, Uint8Array>()
   for (const name of names) {
     if (name.endsWith('.resS') || name.endsWith('.resource')) {
-      resources.set(name, await source.read(name))
+      // By name, not by path: a texture names the file it streams from and
+      // never says where it sits, so a source rooted above the data directory
+      // would otherwise match none of them.
+      resources.set(resourceKey(name), await source.read(name))
     }
   }
 
@@ -307,8 +311,11 @@ async function writeTexture(
   result: ImportResult,
 ): Promise<void> {
   if (asset.width === 0 || asset.height === 0 || payload.length === 0) {
-    // Three textures in a real install are header-only. Counted, not written:
-    // an empty image file would only fail later, further from the cause.
+    // Counted, not written: an empty image file would only fail later, further
+    // from the cause. A handful in a real install are genuinely header-only —
+    // but a large count here means the streaming resources were not found
+    // rather than that the textures are empty, and the count is what makes
+    // the difference visible.
     result.emptyTextures++
     return
   }
