@@ -323,7 +323,13 @@ export async function loadQuest(
     )
   }
 
-  await addQuestText(fs, dir, questIni.data.get('QuestText'), localization)
+  await addQuestText(
+    fs,
+    dir,
+    questIni.data.get('QuestText'),
+    localization,
+    quest.defaultLanguage,
+  )
 
   return { quest, components, path: dir }
 }
@@ -339,12 +345,22 @@ async function addQuestText(
   dir: string,
   section: Map<string, string> | undefined,
   localization: Localization,
+  defaultLanguage: string,
 ): Promise<void> {
   const files = [...(section?.keys() ?? [])]
     .filter((name) => name.length > 0)
     .map((name) => combine(dir, name))
+
+  const dict = await readDictionary(fs, files)
+  // `QuestData.cs:2273`. A scenario written in another language keeps its own
+  // `defaultlanguage`, and setting it is what makes that language *searched*:
+  // a lookup only visits the required ones, and a key the author never
+  // translated into English is otherwise reported as missing and drawn as its
+  // own name — `EventStart.button1` on the button it belongs to.
+  dict.defaultLanguage = defaultLanguage
+
   localization.removeDictionary('qst')
-  localization.addDictionary('qst', await readDictionary(fs, files))
+  localization.addDictionary('qst', dict)
 }
 
 /**

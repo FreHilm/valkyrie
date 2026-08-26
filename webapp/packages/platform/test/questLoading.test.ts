@@ -329,6 +329,34 @@ MONSTER_ZOMBIE,Zombie
     expect(loaded.context.localization.selectDictionary('val')?.getValue('MENU_PLAY')).toBe('Play')
   })
 
+  it('searches the language a scenario was written in', async () => {
+    // A community scenario is often authored in its author's language and
+    // only partly translated. `keyExists` visits the required languages, and
+    // the quest's own `defaultlanguage` is what makes its language one of
+    // them — without it a key the author never translated is reported missing
+    // and drawn as its own name.
+    const fs = await tree({
+      '/content/base/content_pack.ini': PACK,
+      '/content/base/monsters.ini': '',
+      '/quests/pt/quest.ini':
+        '[Quest]\nformat=18\nname=Roubo\ntype=MoM\ndefaultlanguage=Portuguese\n\n' +
+        '[QuestText]\nLocalization.Portuguese.txt\nLocalization.English.txt\n',
+      // The button label exists only in the language it was written in.
+      '/quests/pt/Localization.Portuguese.txt': '.,Portuguese\nEventStart.button1,Continuar\n',
+      '/quests/pt/Localization.English.txt': '.,English\nOTHER,Something\n',
+    })
+    const loaded = await loadContent(fs, {
+      root: '/content',
+      importPath: '/import',
+      gameType: 'MoM',
+      localization: new Localization(),
+    })
+    await loadQuest(fs, '/quests/pt', loaded.context.localization)
+
+    const qst = loaded.context.localization.selectDictionary('qst')
+    expect(qst?.getValue('EventStart.button1')).toBe('Continuar')
+  })
+
   it("registers the scenario's own text as the qst dictionary", async () => {
     const fs = await localizedTree()
     const loaded = await loadContent(fs, {
