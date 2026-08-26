@@ -14,26 +14,27 @@
 import {
   activationDialog,
   board,
-  endGame,
-  inventory,
-  options,
-  importScreen,
-  monsterDialog,
-  playScreen,
-  questLog,
   button,
+  contentSelect,
   el,
+  endGame,
   eventDialog,
   heroSelection,
+  importScreen,
   installUnits,
+  inventory,
   itemsFrom,
   label,
+  Layer,
   mainMenu,
+  monsterDialog,
+  options,
   panel,
+  playScreen,
   questDetails,
+  questLog,
   questSelection,
   rawText,
-  Layer,
 } from '@valkyrie/ui'
 import {
   ActivationInstance,
@@ -54,16 +55,19 @@ import type {
   MonsterInstance,
 } from '@valkyrie/core'
 import {
+  autoSaveConfig,
   canPickDirectory,
   canvasTextureEncoder,
   combine,
+  CompositeAssetSource,
   dirname,
   FetchHttpClient,
   importFfgApp,
   isUnityAsset,
+  loadConfig,
+  loadContent,
   MemoryFileSystem,
   OpfsFileSystem,
-  CompositeAssetSource,
   PickedDirectorySource,
   StoragePaths,
   TextureCache,
@@ -213,6 +217,7 @@ function menu(): void {
             { label: rawText('Play a quest'), onPress: () => void library() },
             { label: rawText('Import game files'), onPress: importDemo },
             { label: rawText('Load from dev server'), onPress: () => void devLoad() },
+            { label: rawText('Content'), onPress: () => void contentSelectScreen() },
             { label: rawText('Browse scenarios'), onPress: () => void browseScenarios() },
             { label: rawText('Add a scenario'), onPress: addScenario },
             { label: rawText('Browse quests'), onPress: quests },
@@ -858,9 +863,19 @@ async function play(
   let aim = (command: CameraCommand): void => {
     pendingCamera.push(command)
   }
+  // What the player told the content screen they own. `Game.SelectQuest`
+  // reads the same section before pulling up the quest list.
+  const storage = new StoragePaths(
+    { appData: '/appdata', content: '/content', temp: '/tmp' },
+    'MoM',
+  )
+  const config = await loadConfig(fs, storage)
+
   const { session, resolveTexture, content, components, gameType, pixelsPerSquare } =
     await startQuest(fs, paths, questPath, {
       questRoot,
+      selectedPacks: config.getPacks('MoM'),
+      basePackId: BASE_PACK_ID,
       camera: (command) => {
         aim(command)
       },
@@ -1124,6 +1139,62 @@ function endGameDemo(): void {
     minutes: 95,
     rounds: 12,
   })
+  show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
+}
+
+/** `GameType.BaseContentPackId()`, which is loaded whatever is selected. */
+const BASE_PACK_ID = 'MoMBase'
+
+/**
+ * Which boxes the player owns, written straight through to `config.ini`.
+ *
+ * The selection is what a scenario reads: `#<packId>` decides whether it may
+ * ask for a first-edition tile, so this is the difference between a quest
+ * knowing what is on the table and assuming everything is.
+ */
+async function contentSelectScreen(): Promise<void> {
+  const fs = new OpfsFileSystem(navigator.storage as unknown as StorageManagerLike)
+  const storage = new StoragePaths(
+    { appData: '/appdata', content: '/content', temp: '/tmp' },
+    'MoM',
+  )
+  const paths = libraryPaths(storage)
+  const config = await loadConfig(fs, storage, autoSaveConfig(fs, storage))
+
+  const screen = contentSelect({
+    onToggle: (id) => {
+      if (config.getPacks('MoM').includes(id)) config.removePack('MoM', id)
+      else config.addPack('MoM', id)
+      void render()
+    },
+    onClose: menu,
+  })
+
+  // Read once, so toggling does not re-walk the content root each time.
+  const found = await loadContent(fs, {
+    root: paths.content,
+    importPath: paths.imported,
+    // The names are keys, so the dictionaries have to be in place to read
+    // them: `pck` comes from the base pack and `ffg` from the import.
+    uiText: paths.uiText,
+    gameType: 'MoM',
+  })
+
+  async function render(): Promise<void> {
+    screen.show({
+      packs: found.available.map((pack) => ({
+        id: pack.id,
+        // `GetContentName`: the ini holds a key, and an id with no `{` may
+        // still have a name in the `pck` dictionary the base pack carries.
+        name: found.content.getContentName(pack.id),
+        type: pack.type,
+      })),
+      selected: new Set(config.getPacks('MoM')),
+      baseId: BASE_PACK_ID,
+    })
+  }
+
+  await render()
   show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
 }
 

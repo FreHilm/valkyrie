@@ -155,6 +155,10 @@ export async function startQuest(
     questRoot?: string
     /** Where an event asks the camera to look. */
     camera?: (command: CameraCommand) => void
+    /** Pack ids the player owns. Everything found loads when this is absent. */
+    selectedPacks?: Iterable<string>
+    /** The pack that loads whatever the selection says. */
+    basePackId?: string
   } = {},
 ): Promise<StartedQuest> {
   // Content first, quest second: both register dictionaries, and the
@@ -167,6 +171,12 @@ export async function startQuest(
     importPath: paths.imported,
     uiText: paths.uiText,
     gameType,
+    // `Game.SelectQuest` loads what the player owns and nothing else, so a
+    // scenario's `#<packId>` tests answer for their table rather than for the
+    // content directory. Left out, every pack found is loaded.
+    ...(options.selectedPacks === undefined
+      ? {}
+      : { selected: options.selectedPacks, basePackId: options.basePackId ?? '' }),
     ...(options.android === undefined ? {} : { android: options.android }),
   })
 
@@ -197,6 +207,7 @@ export async function startQuest(
     contentActivations: new Map(content.content.getAll(Activations)),
     gameType,
     localization: content.context.localization,
+    loadedPacks: content.loaded,
     isQuestTransition: (name) => nested.has(normaliseQuestPath(name)),
     ...(options.camera === undefined ? {} : { camera: options.camera }),
   })

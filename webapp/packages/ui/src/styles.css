@@ -285,6 +285,58 @@ body {
   opacity: 0.92;
 }
 
+/* ---- content selection ---- */
+.vk-content-select {
+  max-width: calc(var(--u) * 30);
+}
+.vk-content-select__hint {
+  color: var(--vk-text-soft);
+}
+.vk-packs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 8), 1fr));
+  gap: calc(var(--u) * 0.4);
+}
+.vk-pack {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.15);
+  padding: calc(var(--u) * 0.4);
+  font: inherit;
+  text-align: left;
+  color: var(--vk-text);
+  background: var(--vk-surface-raised);
+  border: 1px solid var(--vk-rule);
+  border-radius: var(--vk-radius);
+  cursor: pointer;
+  /* Unowned packs read as dimmed, which is how the C# shows them — and the
+     state line says which, so the difference is never colour alone. */
+  opacity: 0.55;
+}
+.vk-pack--on {
+  opacity: 1;
+  border-color: var(--vk-accent);
+}
+.vk-pack:disabled {
+  cursor: default;
+}
+.vk-pack__art {
+  width: 100%;
+  height: auto;
+  border-radius: var(--vk-radius);
+}
+.vk-pack__name {
+  font-weight: 600;
+}
+.vk-pack__state {
+  font-size: var(--vk-text-small);
+  color: var(--vk-text-soft);
+}
+.vk-pack:focus-visible {
+  outline: 3px solid var(--vk-focus);
+  outline-offset: 2px;
+}
+
 /* ---- event dialog ---- */
 .vk-event {
   gap: var(--vk-gap);
@@ -428,7 +480,7 @@ body {
 @supports (backdrop-filter: blur(1px)) {
   .vk-shell--menu .vk-menu {
     background: rgb(14 12 18 / 42%);
-    backdrop-filter: blur(calc(var(--u) * 0.4)) saturate(120%);
+    backdrop-filter: blur(calc(var(--u) * 0.1)) saturate(120%);
   }
 }
 .vk-shell--menu .vk-menu > .vk-text {
