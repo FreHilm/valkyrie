@@ -19,9 +19,18 @@ import { bundleQuest } from '../src/quest/questAdapter.js'
 import { QuestSession } from '../src/quest/QuestSession.js'
 import { MoMPhase } from '../src/quest/RoundController.js'
 
-function session(ini: string, random: (n: number) => number = () => 0): QuestSession {
+function session(
+  ini: string,
+  random: (n: number) => number = () => 0,
+  isQuestTransition?: (name: string) => boolean,
+): QuestSession {
   const components = loadQuestSections(readFromString(ini), 'test.ini', {})
-  const built = new QuestSession({ bundle: bundleQuest(components), components, random })
+  const built = new QuestSession({
+    bundle: bundleQuest(components),
+    components,
+    random,
+    ...(isQuestTransition === undefined ? {} : { isQuestTransition }),
+  })
   built.runtime.heroes.push({ heroName: 'HeroAshcanPete', activated: false })
   return built
 }
@@ -312,6 +321,56 @@ event1=
 
     expect(quest.view().kind).toBe('board')
     expect(quest.runtime.has('TokenLoot')).toBe(true)
+  })
+
+  it('hands over when an event names another scenario instead of its own', () => {
+    // `EventManager.cs:129`: a name that is not an event but *is* a file is a
+    // scenario to change to. The demo quest's every branch is one of these,
+    // and without it the button does nothing at all.
+    const quest = session(
+      `[EventOpening]
+trigger=EventStart
+buttons=1
+event1=examples/tokenvar/quest.ini
+`,
+      () => 0,
+      (name) => name === 'examples/tokenvar/quest.ini',
+    )
+    quest.start()
+    quest.press(0)
+
+    const view = quest.view()
+    expect(view.kind).toBe('changeQuest')
+    expect(view.kind === 'changeQuest' && view.path).toBe('examples/tokenvar/quest.ini')
+  })
+
+  it('still warns about a name that is neither an event nor a scenario', () => {
+    const quest = session(`[EventOpening]
+trigger=EventStart
+buttons=1
+event1=EventNowhere
+`)
+    quest.start()
+    quest.press(0)
+
+    expect(quest.view().kind).toBe('board')
+    expect(quest.runtime.log.toArray().some((e) => e.entry.includes('Missing event'))).toBe(true)
+  })
+
+  it('keeps the heroes and the campaign vars across a handover', () => {
+    // `TrimQuest` keeps `%` and `$%`; the board and the monsters do not come.
+    const quest = session('[EventIdle]\n')
+    quest.runtime.vars.setValue('%campaign', 3)
+    quest.runtime.vars.setValue('local', 7)
+    quest.runtime.spawnMonster('MonsterZombie', 'SpawnA')
+
+    quest.changeQuest()
+
+    expect(quest.runtime.heroes).toHaveLength(1)
+    expect(quest.runtime.vars.getValue('%campaign')).toBe(3)
+    expect(quest.runtime.vars.getValue('local')).toBe(0)
+    expect(quest.runtime.monsters).toEqual([])
+    expect(quest.view().kind).toBe('board')
   })
 
   it('moves into the mythos phase when the investigators finish', () => {

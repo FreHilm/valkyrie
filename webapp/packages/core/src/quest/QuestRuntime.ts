@@ -176,6 +176,22 @@ export class QuestRuntime {
     }
   }
 
+  /**
+   * Clears what a handover to another scenario does not carry across.
+   *
+   * `Quest.ChangeQuest` rebuilds the board, the monsters and the item state
+   * and keeps the heroes; the variables are trimmed by the caller, because
+   * which of those survive is `VarManager`'s rule rather than this one's.
+   */
+  resetForNewQuest(): void {
+    this.board.clear()
+    this.monsters.length = 0
+    this.heldItems.clear()
+    this.itemSelect.clear()
+    this.itemInspect.clear()
+    this.vars.setValue('#monsters', 0)
+  }
+
   /** `Quest.Remove`. Removing something absent is a no-op. */
   remove(names: readonly string[]): void {
     for (const name of names) {

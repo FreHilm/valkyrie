@@ -50,6 +50,8 @@ import type { ActivationView, AttackView, EventsView, MonsterInstance } from '@v
 import {
   canPickDirectory,
   canvasTextureEncoder,
+  combine,
+  dirname,
   FetchHttpClient,
   importFfgApp,
   isUnityAsset,
@@ -65,7 +67,7 @@ import { acquireQuest } from './acquire.js'
 import { devManifest, loadFromDevServer } from './devLoad.js'
 import { clearStage, lastStage, stage } from './trace.js'
 import { browsableQuests, byRecency, fetchQuestIndex, packageUrl } from './questIndex.js'
-import { libraryPaths, startQuest, surveyLibrary } from './library.js'
+import { libraryPaths, normaliseQuestPath, startQuest, surveyLibrary } from './library.js'
 import { monsterProfile, questArt, questUiElements, tileImages } from './questArt.js'
 import { monsterDialogView } from './monsterView.js'
 import { formatBytes, storageReport } from './storage.js'
@@ -835,10 +837,16 @@ async function play(
   fs: OpfsFileSystem,
   paths: ReturnType<typeof libraryPaths>,
   questPath: string,
+  /**
+   * Where the scenario the player picked came from. A handover names its
+   * target relative to that, however deep the chain has gone, so it is
+   * carried rather than recomputed from the quest now loading.
+   */
+  questRoot: string = questPath,
 ): Promise<void> {
   stage('play: loading quest', questPath)
   const { session, resolveTexture, content, components, gameType, pixelsPerSquare } =
-    await startQuest(fs, paths, questPath)
+    await startQuest(fs, paths, questPath, { questRoot })
   stage('play: quest loaded')
   session.runtime.heroes.push(
     { heroName: 'HeroAshcanPete', activated: false },
@@ -873,6 +881,8 @@ async function play(
   // canvas because there is nothing else to cut a sprite sheet with.
   const urls = new Map<string, string | null>()
   const uiSizes = new Map<string, { width: number; height: number }>()
+  /** Set once this screen has been replaced, so its background work stops. */
+  let left = false
 
   function imageUrl(path: string, crop?: Crop): string | null {
     const key =
@@ -940,6 +950,15 @@ async function play(
           activated: instance.activated,
         }
       }),
+    onChangeQuest: (path) => {
+      // The board and everything on it belongs to the scenario being left;
+      // the campaign variables it keeps are `changeQuest`'s business.
+      session.changeQuest()
+      // The path names a `quest.ini`; what is loaded is the directory holding
+      // it, and the root stays put so a chain of handovers keeps resolving.
+      const next = combine(questRoot, dirname(normaliseQuestPath(path)))
+      void play(fs, paths, next, questRoot)
+    },
     monsterView: (index, close) =>
       monsterDialogView(
         {
@@ -983,6 +1002,7 @@ async function play(
     // Leaving on purpose is not the tab dying mid-load, so the breadcrumb goes
     // with it — otherwise the menu reports a failure that never happened.
     clearStage()
+    left = true
     screen.destroy()
     textures.clear()
     for (const url of urls.values()) if (url !== null) URL.revokeObjectURL(url)
@@ -993,6 +1013,9 @@ async function play(
   // at once is how a tab runs out of memory.
   void (async () => {
     for (const path of prefetch) {
+      // A scenario can hand over mid-decode, and the tiles being fetched
+      // belong to the board that has just been taken down.
+      if (left) return
       stage('play: decoding tile', path)
       const image = await textures.load(path)
       if (image === null) continue

@@ -53,6 +53,13 @@ export interface EventContext {
    * probes the filesystem; the caller decides here.
    */
   isQuestTransition?: (name: string) => boolean
+  /**
+   * A scenario is handing over to another one, named by a path relative to
+   * the quest it came from. `EventManager.cs:171` checks for this before
+   * anything else it would do with an event, because there is no event —
+   * the whole quest is about to be replaced.
+   */
+  startQuest?: (path: string) => void
   /** The board and party state an event mutates. */
   runtime?: QuestRuntime
   /** Presents an event and resolves when the player answers with a button. */
@@ -171,6 +178,14 @@ export class EventManager {
     while (this.stack.length > 0) {
       const name = this.stack.pop()
       if (name === undefined) return
+
+      // Before the lookup, not after: a transition has no event to find, and
+      // treating it as a missing one drops the handover silently.
+      if (this.questTransitions.has(name)) {
+        this.context.startQuest?.(name)
+        return
+      }
+
       if (this.isDisabled(name)) continue
 
       const event = this.context.events.get(name)

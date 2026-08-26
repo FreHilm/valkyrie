@@ -71,10 +71,22 @@ export type SessionView =
   | { kind: 'activation'; monster: MonsterInstance; activation: ActivationInstance }
   | { kind: 'phase'; phase: MoMPhase }
   | { kind: 'ended' }
+  /**
+   * The scenario is handing over to another one. `path` names its `quest.ini`
+   * relative to the directory this quest was loaded from.
+   */
+  | { kind: 'changeQuest'; path: string }
   | { kind: 'board' }
 
 export interface SessionOptions {
   bundle: QuestBundle
+  /**
+   * Whether a name a scenario queues is another scenario rather than one of
+   * its own events. `EventManager.cs:129` answers it with `File.Exists`; the
+   * caller here answers it from a listing, because the check has to be
+   * synchronous and a filesystem behind promises is not.
+   */
+  isQuestTransition?: (name: string) => boolean
   /**
    * Content monsters, in the order the content data yields them. Without them
    * a spawn that names a content type — which is most of them — resolves to
@@ -109,6 +121,9 @@ export class QuestSession {
   readonly rounds: RoundControllerMoM
 
   private pending: RoundRequest | null = null
+
+  /** Set once a scenario has handed over; the host reloads and starts again. */
+  private pendingQuest: string | null = null
   /** `Quest.monsterSelect`: what each spawn section resolved to. */
   private readonly monsterSelect = new Map<string, string>()
   /** `Quest.puzzle`: puzzles in progress, kept until solved. */
@@ -140,6 +155,12 @@ export class QuestSession {
       // engine does not need to know a screen exists.
       present: (event) => {
         this.placeSpawn(event.sectionName)
+      },
+      ...(options.isQuestTransition === undefined
+        ? {}
+        : { isQuestTransition: options.isQuestTransition }),
+      startQuest: (path) => {
+        this.pendingQuest = path
       },
       rounds: {
         inMonsterPhase: () => this.rounds.inMonsterPhase(),
@@ -174,6 +195,21 @@ export class QuestSession {
   }
 
   /**
+   * Drops the state a handover does not carry across.
+   *
+   * `Quest.ChangeQuest` keeps the heroes and the campaign-scoped variables —
+   * `VarManager.TrimQuest` keeps `%` and `$%` and nothing else — and starts
+   * the rest over. The board, the monsters and the items belong to the
+   * scenario that is being left behind.
+   */
+  changeQuest(): void {
+    this.pendingQuest = null
+    this.pending = null
+    this.runtime.vars.trimQuest()
+    this.runtime.resetForNewQuest()
+  }
+
+  /**
    * What should be on screen.
    *
    * Order matters: an open event outranks a pending activation, because an
@@ -181,6 +217,9 @@ export class QuestSession {
    * first.
    */
   view(): SessionView {
+    // Ahead of everything: the quest this is a view of is about to be
+    // replaced, so nothing else it could report is worth reporting.
+    if (this.pendingQuest !== null) return { kind: 'changeQuest', path: this.pendingQuest }
     if (this.events.questHasEnded) return { kind: 'ended' }
 
     const current = this.events.current

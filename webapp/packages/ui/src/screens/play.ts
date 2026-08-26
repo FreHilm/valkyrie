@@ -30,6 +30,8 @@ import type { Text } from '../text.js'
 export interface PlayableSession {
   view: () => {
     kind: string
+    /** Set on `changeQuest`: the scenario being handed over to. */
+    path?: string
     name?: string
     text?: string
     buttons?: readonly { label: string; index: number; disabled: boolean }[]
@@ -109,6 +111,11 @@ export interface PlayOptions {
    * of them, and the event that dismisses it removes all three.
    */
   questUi?: () => readonly QuestUiElement[]
+  /**
+   * A scenario has handed over to another one. The screen cannot do it — the
+   * new quest has to be read and loaded — so it says so and stops drawing.
+   */
+  onChangeQuest?: (path: string) => void
   /** The monsters in play, for the strip down the edge of the board. */
   monsterList?: () => readonly MonsterEntry[]
   /**
@@ -302,6 +309,13 @@ export function playScreen(options: PlayOptions): PlayScreen {
     clear(controls)
 
     const current = session.view()
+
+    // Before anything is drawn: what is on screen belongs to the scenario
+    // being left, and the next one is not loaded yet.
+    if (current.kind === 'changeQuest') {
+      if (current.path !== undefined) options.onChangeQuest?.(current.path)
+      return
+    }
 
     if (current.kind === 'event') {
       events.show({

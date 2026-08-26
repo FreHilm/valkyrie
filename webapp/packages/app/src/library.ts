@@ -92,6 +92,34 @@ export async function surveyLibrary(fs: FileSystem, paths: LibraryPaths): Promis
   return { hasContent: packs.length > 0, packs, quests }
 }
 
+/**
+ * Every `quest.ini` beneath a directory, as paths relative to it.
+ *
+ * `EventManager.cs:124` resolves a handover against `originalPath` — the
+ * directory the *first* quest came from — so a sub-quest handing over to a
+ * sibling still names its path from the top.
+ */
+async function nestedQuests(fs: FileSystem, root: string): Promise<Set<string>> {
+  const found = new Set<string>()
+  const queue = [root]
+  while (queue.length > 0) {
+    const dir = queue.shift()
+    if (dir === undefined) continue
+    for (const entry of await fs.list(dir)) {
+      if (entry.kind === 'directory') queue.push(entry.path)
+      else if (entry.path.endsWith('/quest.ini') && entry.path !== `${root}/quest.ini`) {
+        found.add(entry.path.slice(root.length + 1))
+      }
+    }
+  }
+  return found
+}
+
+/** `ChangeQuest` strips a leading separator before joining the path. */
+export function normaliseQuestPath(name: string): string {
+  return name.replace(/\\/g, '/').replace(/^\/+/, '')
+}
+
 export interface StartedQuest {
   session: QuestSession
   /** Resolves a content image path to a file that exists. */
@@ -115,7 +143,16 @@ export async function startQuest(
   fs: FileSystem,
   paths: LibraryPaths,
   questPath: string,
-  options: { gameType?: 'MoM' | 'D2E'; android?: boolean } = {},
+  options: {
+    gameType?: 'MoM' | 'D2E'
+    android?: boolean
+    /**
+     * The directory the first quest came from. A handover names its target
+     * from there, so a sub-quest has to keep looking for siblings at the top
+     * rather than beneath itself.
+     */
+    questRoot?: string
+  } = {},
 ): Promise<StartedQuest> {
   // Content first, quest second: both register dictionaries, and the
   // scenario's own text has to win where a key collides.
@@ -145,6 +182,11 @@ export async function startQuest(
     })
   }
 
+  // A scenario can hand over to another one by naming its `quest.ini`, and
+  // the check has to be synchronous — so the paths are listed once here
+  // rather than probed when the event fires.
+  const nested = await nestedQuests(fs, options.questRoot ?? questPath)
+
   const session = new QuestSession({
     bundle: bundleQuest(quest.components),
     components: quest.components,
@@ -152,6 +194,7 @@ export async function startQuest(
     contentActivations: new Map(content.content.getAll(Activations)),
     gameType,
     localization: content.context.localization,
+    isQuestTransition: (name) => nested.has(normaliseQuestPath(name)),
   })
 
   return {
