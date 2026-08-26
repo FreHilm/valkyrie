@@ -14,6 +14,7 @@
 import { ActivationInstance } from './ActivationInstance.js'
 import type { ActivationView } from './ActivationInstance.js'
 import { EventManager } from './EventManager.js'
+import { packVariables } from '../content/packSelection.js'
 import type { CameraCommand } from './EventManager.js'
 import { QuestRuntime } from './QuestRuntime.js'
 import type { MonsterInstance } from './QuestRuntime.js'
@@ -81,6 +82,12 @@ export type SessionView =
 
 export interface SessionOptions {
   bundle: QuestBundle
+  /**
+   * The content packs in play. `Quest.cs:237` turns each into a `#<packId>`
+   * variable, and a scenario tests them to decide what it may ask the player
+   * to place — House Lynch opens by checking for the first-edition tiles.
+   */
+  loadedPacks?: Iterable<string>
   /**
    * Whether a name a scenario queues is another scenario rather than one of
    * its own events. `EventManager.cs:129` answers it with `File.Exists`; the
@@ -194,6 +201,18 @@ export class QuestSession {
       ...(options.playAudio === undefined ? {} : { playAudio: options.playAudio }),
       ...(options.save === undefined ? {} : { save: options.save }),
     })
+
+    this.setPackVariables()
+  }
+
+  /**
+   * `Quest.cs:237`. Set in the constructor and again on a handover, because
+   * `TrimQuest` drops them and the scenario being handed to tests them too.
+   */
+  private setPackVariables(): void {
+    for (const [name, value] of packVariables(this.options.loadedPacks ?? [])) {
+      this.runtime.vars.setValue(name, value)
+    }
   }
 
   /** Fires the quest's `EventStart` trigger. */
@@ -215,6 +234,7 @@ export class QuestSession {
     this.pending = null
     this.runtime.vars.trimQuest()
     this.runtime.resetForNewQuest()
+    this.setPackVariables()
   }
 
   /**
