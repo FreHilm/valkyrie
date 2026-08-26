@@ -14,6 +14,7 @@ import { button, label, panel } from '../components.js'
 import { clear, el } from '../dom.js'
 import { rawText } from '../text.js'
 import type { Text } from '../text.js'
+import type { RichTextOptions } from '../richText.js'
 
 /** Which step of the activation is showing. */
 export type ActivationStep = 'overview' | 'attack' | 'move'
@@ -48,6 +49,8 @@ export interface ActivationDialogOptions {
   onLog: (entry: string) => void
   /** `activated()`: the activation is finished. */
   onFinished: () => void
+  /** Renders quest prose as the game does: `<i>`, `<b>` and symbol icons. */
+  rich?: RichTextOptions
   strings?: Partial<ActivationStrings>
 }
 
@@ -112,7 +115,7 @@ export function activationDialog(options: ActivationDialogOptions): ActivationDi
   function renderOverview(view: ActivationView): void {
     if (view.effect.length > 0) {
       logOnce('overview', view.effect)
-      element.append(paragraphs(view.effect))
+      element.append(paragraphs(view.effect, options.rich))
     }
 
     const actions = el('div', { class: 'vk-activation__buttons', attrs: { role: 'group' } })
@@ -136,7 +139,7 @@ export function activationDialog(options: ActivationDialogOptions): ActivationDi
 
   function renderStep(text: string): void {
     logOnce(step, text)
-    element.append(paragraphs(text))
+    element.append(paragraphs(text, options.rich))
     const actions = el('div', { class: 'vk-activation__buttons', attrs: { role: 'group' } })
     actions.append(
       button(strings.finished, {
@@ -213,11 +216,11 @@ export function activationDialog(options: ActivationDialogOptions): ActivationDi
 }
 
 /** Blank lines separate paragraphs, as the event dialog does. */
-function paragraphs(text: string): HTMLElement {
+function paragraphs(text: string, rich?: RichTextOptions): HTMLElement {
   const block = el('div', { class: 'vk-activation__text' })
   for (const paragraph of text.split(/\n{2,}/)) {
     if (paragraph.trim().length === 0) continue
-    block.append(label(rawText(paragraph.trim())))
+    block.append(label(rawText(paragraph.trim()), rich === undefined ? {} : { rich }))
   }
   return block
 }

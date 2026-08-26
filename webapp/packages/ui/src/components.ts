@@ -10,6 +10,8 @@
  */
 
 import { el } from './dom.js'
+import { setRichText } from './richText.js'
+import type { RichTextOptions } from './richText.js'
 import { resolve } from './text.js'
 import type { Text } from './text.js'
 import type { TextSize } from './units.js'
@@ -19,6 +21,12 @@ export interface LabelOptions {
   class?: string | readonly string[]
   /** Renders as a heading at the given level, rather than a paragraph. */
   heading?: 1 | 2 | 3
+  /**
+   * Renders the content as quest text: `<i>` and `<b>` become elements, and
+   * the game's symbol glyphs become named icons. Interface copy has neither,
+   * so leaving this out is the right default for a label.
+   */
+  rich?: RichTextOptions
 }
 
 /** Text at one of the sizes `UIScaler`'s comment names: small, medium, large. */
@@ -28,10 +36,16 @@ export function label(content: Text, options: LabelOptions = {}): HTMLElement {
 
   // Sizing lives in the stylesheet, keyed off the size class — inline styles
   // would duplicate it and put a unit calculation out of the cascade's reach.
-  return el(tag, {
+  const node = el(tag, {
     class: ['vk-text', `vk-text--${size}`, ...toArray(options.class)],
-    text: resolve(content),
   })
+
+  // Quest prose carries `<i>` and the game's symbol glyphs; interface copy
+  // does not, so plain text stays the default and the caller opts in.
+  if (options.rich === undefined) node.textContent = resolve(content)
+  else setRichText(node, resolve(content), options.rich)
+
+  return node
 }
 
 export interface ButtonOptions {

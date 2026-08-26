@@ -19,6 +19,7 @@ import { board } from '../board.js'
 import { buildScene } from '../boardScene.js'
 import type { SceneItem, SceneSources } from '../boardScene.js'
 import { questUiLayer } from '../questUiLayer.js'
+import type { RichTextOptions } from '../richText.js'
 import type { QuestUiElement } from '../questUiLayer.js'
 import { button, label, panel } from '../components.js'
 import { clear, el } from '../dom.js'
@@ -118,6 +119,11 @@ export interface PlayOptions {
    * to show it.
    */
   monsterView?: (index: number, close: () => void) => MonsterDialogView | null
+  /**
+   * How quest prose is rendered: its `<i>` and `<b>` as elements, its symbol
+   * glyphs as named icons. Every screen this routes to gets the same one.
+   */
+  rich?: RichTextOptions
   /** Loads and crops an image; resolves to null when it is unavailable. */
   loadTexture?: (
     path: string,
@@ -136,6 +142,8 @@ export interface PlayScreen {
 export function playScreen(options: PlayOptions): PlayScreen {
   const strings = { ...DEFAULT_STRINGS, ...options.strings }
   const { session } = options
+
+  const rich = options.rich === undefined ? {} : { rich: options.rich }
 
   const overlay = el('div', { class: 'vk-play__overlay' })
   const controls = el('div', { class: 'vk-play__controls', attrs: { role: 'group' } })
@@ -184,10 +192,11 @@ export function playScreen(options: PlayOptions): PlayScreen {
   }
 
   const monsters = el('div', { class: 'vk-play__monsters' })
-  const monster = monsterDialog({ onLog: () => {} })
+  const monster = monsterDialog({ ...rich, onLog: () => {} })
 
-  const events = eventDialog()
+  const events = eventDialog(rich)
   const activation = activationDialog({
+    ...rich,
     onLog: () => {},
     onFinished: () => {
       session.activationDone()
@@ -196,6 +205,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
   })
 
   const questUi = questUiLayer({
+    ...rich,
     onSelect: (name) => {
       session.activate(name)
       refresh()

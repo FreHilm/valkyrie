@@ -13,6 +13,8 @@
 import { colourFromName, layoutQuestUi } from '@valkyrie/core'
 import type { QuestUiPlacement } from '@valkyrie/core'
 import { el } from './dom.js'
+import { setRichText } from './richText.js'
+import type { RichTextOptions } from './richText.js'
 import { pixelsPerUnit } from './units.js'
 
 /** One element to draw, with its art already resolved to a URL. */
@@ -35,6 +37,8 @@ export interface QuestUiElement {
 
 export interface QuestUiLayerOptions {
   onSelect: (name: string) => void
+  /** Renders the elements' own prose as the game does. */
+  rich?: RichTextOptions
   /** Reports a colour the C# would have warned about. */
   onWarning?: (message: string) => void
 }
@@ -115,7 +119,7 @@ export function questUiLayer(options: QuestUiLayerOptions): QuestUiLayer {
         } else {
           node.style.background = colour(item.backgroundColour, item)
           const text = el('div', { class: 'vk-quest-ui__text' })
-          text.textContent = item.text
+          setRichText(text, item.text, options.rich ?? {})
           text.style.color = colour(item.textColour, item)
           text.style.justifyContent =
             item.textAlignment === 'top'

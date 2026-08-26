@@ -256,6 +256,35 @@ body {
   cursor: grabbing;
 }
 
+/*
+ * Game symbols inside quest prose.
+ *
+ * The game draws these as icons from a private-use range in its own font,
+ * which the port does not ship (docs/ui-foundation.md). An unshipped glyph is
+ * not a styling difference — it is invisible, and "spend 1 {action}" loses the
+ * word that made it an instruction. So the symbol is set as its own name, in a
+ * chip that reads as one token rather than a stray word in the sentence.
+ *
+ * Point `--vk-symbol-font` at a face that carries the range and these become
+ * the glyphs instead, without anything but this rule changing.
+ */
+.vk-symbol {
+  display: inline-block;
+  padding: 0 0.4em;
+  margin: 0 0.12em;
+  border: 1px solid currentColor;
+  border-radius: 0.9em;
+  font-family: var(--vk-symbol-font, var(--vk-font-ui));
+  font-size: 0.78em;
+  font-weight: 600;
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  white-space: nowrap;
+  vertical-align: baseline;
+  opacity: 0.92;
+}
+
 /* ---- event dialog ---- */
 .vk-event {
   gap: var(--vk-gap);

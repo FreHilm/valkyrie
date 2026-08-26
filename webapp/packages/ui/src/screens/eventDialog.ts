@@ -13,6 +13,7 @@ import { button, label, panel } from '../components.js'
 import { clear, el } from '../dom.js'
 import { rawText } from '../text.js'
 import type { Text } from '../text.js'
+import type { RichTextOptions } from '../richText.js'
 
 export interface EventButton {
   /** Already translated and symbol-substituted. */
@@ -43,7 +44,7 @@ export interface EventDialog {
  * One element, reused: a quest fires hundreds of events, and rebuilding the
  * dialog each time would lose focus and make the transition flicker.
  */
-export function eventDialog(): EventDialog {
+export function eventDialog(options: { rich?: RichTextOptions } = {}): EventDialog {
   const body = el('div', { class: 'vk-event__text' })
   const actions = el('div', { class: 'vk-event__buttons', attrs: { role: 'group' } })
   const figure = el('div', { class: 'vk-event__image' })
@@ -67,7 +68,12 @@ export function eventDialog(): EventDialog {
       // relies on the font. Real paragraphs read better and are selectable.
       for (const paragraph of view.text.split(/\n{2,}/)) {
         if (paragraph.trim().length === 0) continue
-        body.append(label(rawText(paragraph.trim())))
+        body.append(
+          label(
+            rawText(paragraph.trim()),
+            options.rich === undefined ? {} : { rich: options.rich },
+          ),
+        )
       }
 
       clear(actions)

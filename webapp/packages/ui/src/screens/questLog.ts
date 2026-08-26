@@ -14,6 +14,8 @@ import { button, label, panel } from '../components.js'
 import { clear, el } from '../dom.js'
 import { rawText } from '../text.js'
 import type { Text } from '../text.js'
+import { setRichText } from '../richText.js'
+import type { RichTextOptions } from '../richText.js'
 
 /** One line of the log, already filtered for the current audience. */
 export interface LogLine {
@@ -57,6 +59,8 @@ export interface QuestLogOptions {
   onSetVariable?: (name: string, value: number) => void
   /** Whether the developer view starts open — `Game.testMode` in the C#. */
   developer?: boolean
+  /** The entries are the same prose the dialogs showed, so they read the same. */
+  rich?: RichTextOptions
   strings?: Partial<QuestLogStrings>
 }
 
@@ -99,9 +103,9 @@ export function questLog(options: QuestLogOptions): QuestLog {
       for (const entry of visible) {
         const item = el('li', {
           class: entry.editor ? ['vk-log__entry', 'vk-log__entry--editor'] : 'vk-log__entry',
-          // A saved entry carries escaped newlines; they become real ones here.
-          text: entry.text.split('\\n').join('\n'),
         })
+        // A saved entry carries escaped newlines; they become real ones here.
+        setRichText(item, entry.text.split('\\n').join('\n'), options.rich ?? {})
         list.append(item)
       }
       element.append(list)

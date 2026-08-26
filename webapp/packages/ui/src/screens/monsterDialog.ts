@@ -15,6 +15,7 @@ import { button, label, panel } from '../components.js'
 import { clear, el } from '../dom.js'
 import { rawText } from '../text.js'
 import type { Text } from '../text.js'
+import type { RichTextOptions } from '../richText.js'
 
 /** Which state the dialog is in. */
 export type MonsterStep = 'options' | 'attackTypes' | 'text'
@@ -72,6 +73,8 @@ const DEFAULT_STRINGS: MonsterDialogStrings = {
 
 export interface MonsterDialogOptions {
   onLog: (entry: string) => void
+  /** Renders quest prose as the game does: `<i>`, `<b>` and symbol icons. */
+  rich?: RichTextOptions
   strings?: Partial<MonsterDialogStrings>
 }
 
@@ -187,7 +190,12 @@ export function monsterDialog(options: MonsterDialogOptions): MonsterDialog {
       const block = el('div', { class: 'vk-monster__text' })
       for (const paragraph of shown.split(/\n{2,}/)) {
         if (paragraph.trim().length === 0) continue
-        block.append(label(rawText(paragraph.trim())))
+        block.append(
+          label(
+            rawText(paragraph.trim()),
+            options.rich === undefined ? {} : { rich: options.rich },
+          ),
+        )
       }
       element.append(block)
     }

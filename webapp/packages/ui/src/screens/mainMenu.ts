@@ -13,6 +13,7 @@ import { selectionList } from '../selectionList.js'
 import type { SelectionItem } from '../traitFilter.js'
 import { rawText } from '../text.js'
 import type { Text } from '../text.js'
+import type { RichTextOptions } from '../richText.js'
 
 export interface MenuAction {
   label: Text
@@ -76,6 +77,8 @@ export function questSelection(options: QuestSelectionOptions): HTMLElement {
 export function questDetails(options: {
   name: string
   description?: string
+  /** A scenario's own blurb, which carries the game's markup and symbols. */
+  rich?: RichTextOptions
   image?: string
   actions: readonly MenuAction[]
 }): HTMLElement {
@@ -86,7 +89,12 @@ export function questDetails(options: {
         ? null
         : el('img', { attrs: { src: options.image, alt: '' }, class: 'vk-quest-details__image' }),
       label(rawText(options.name), { size: 'large', heading: 2 }),
-      options.description === undefined ? null : label(rawText(options.description)),
+      options.description === undefined
+        ? null
+        : label(
+            rawText(options.description),
+            options.rich === undefined ? {} : { rich: options.rich },
+          ),
       el('div', {
         class: 'vk-quest-details__actions',
         children: options.actions.map((action) =>

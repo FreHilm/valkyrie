@@ -44,6 +44,7 @@ import {
   QuestRuntime,
   RoundControllerMoM,
   StringKey,
+  symbolNames,
 } from '@valkyrie/core'
 import type { ActivationView, AttackView, EventsView, MonsterInstance } from '@valkyrie/core'
 import {
@@ -912,8 +913,13 @@ async function play(
     return blob === null ? null : URL.createObjectURL(blob)
   }
 
+  // `outputSymbolReplace` has already turned the markers into glyphs by the
+  // time anything is drawn, so the renderer needs the table read backwards to
+  // know what it is looking at.
+  const glyphs = symbolNames(gameType)
   const screen = playScreen({
     session,
+    rich: { symbolOf: (character) => glyphs.get(character) ?? null },
     sources: questArt({
       content,
       components,
