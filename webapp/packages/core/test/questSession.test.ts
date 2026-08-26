@@ -13,6 +13,8 @@
 
 import { describe, expect, it } from 'vitest'
 
+import { DictionaryI18n } from '../src/i18n/DictionaryI18n.js'
+import { Localization } from '../src/i18n/Localization.js'
 import { readFromString } from '../src/ini/IniRead.js'
 import { loadQuestSections } from '../src/quest/Quest.js'
 import { bundleQuest } from '../src/quest/questAdapter.js'
@@ -30,6 +32,27 @@ function session(
     components,
     random,
     ...(isQuestTransition === undefined ? {} : { isQuestTransition }),
+  })
+  built.runtime.heroes.push({ heroName: 'HeroAshcanPete', activated: false })
+  return built
+}
+
+/**
+ * A session whose scenario text actually resolves.
+ *
+ * The bare harness registers no dictionary, so every `{qst:...}` lookup comes
+ * back as its own key — fine for the routing tests, useless for anything that
+ * asserts on prose.
+ */
+function localizedSession(ini: string, text: readonly string[]): QuestSession {
+  const components = loadQuestSections(readFromString(ini), 'test.ini', {})
+  const localization = new Localization()
+  localization.addDictionary('qst', new DictionaryI18n(['.,English', ...text]))
+  const built = new QuestSession({
+    bundle: bundleQuest(components),
+    components,
+    random: () => 0,
+    localization,
   })
   built.runtime.heroes.push({ heroName: 'HeroAshcanPete', activated: false })
   return built
@@ -602,5 +625,83 @@ event1=
     quest.start()
 
     expect(quest.view().kind).toBe('puzzle')
+  })
+})
+
+/**
+ * The quest log, which `DialogWindow.onButton` fills as the player answers.
+ *
+ * Nothing else writes the prose a player read; the round controller adds only
+ * "Round N" and the phase names. Without this the Log button opens on an empty
+ * list however far into a scenario it is pressed.
+ */
+/**
+ * The quest log, which `DialogWindow.onButton` fills as the player answers.
+ *
+ * Nothing else writes the prose a player read; the round controller adds only
+ * "Round N" and the phase names. Without this the Log button opens on an empty
+ * list however far into a scenario it is pressed.
+ */
+describe('QuestSession log', () => {
+  it('writes what the player read when they answer an event', () => {
+    const quest = localizedSession(
+      `[EventOpening]
+trigger=EventStart
+buttons=1
+event1=
+`,
+      ['EventOpening.text,The office is thick with cigarette smoke.'],
+    )
+    quest.start()
+    quest.press(0)
+
+    expect(quest.runtime.log.toArray().map((e) => e.entry)).toEqual([
+      'The office is thick with cigarette smoke.',
+    ])
+  })
+
+  it('escapes newlines the way a save file carries them', () => {
+    // `text.Replace("\n", "\\n")`, which the log screen turns back.
+    const quest = localizedSession(
+      `[EventOpening]
+trigger=EventStart
+buttons=1
+event1=
+`,
+      ['EventOpening.text,First line.\\nSecond line.'],
+    )
+    quest.start()
+    quest.press(0)
+
+    expect(quest.runtime.log.toArray()[0]?.entry).toBe('First line.\\nSecond line.')
+  })
+
+  it('keeps the glue between pages out of the log', () => {
+    // A scenario chains `display=false` events by the dozen. The C# never
+    // builds a dialog for one, so `onButton` never runs and none of them are
+    // logged — only the pages a player actually answered.
+    const quest = localizedSession(
+      `[EventOpening]
+trigger=EventStart
+buttons=1
+event1=EventGlue
+[EventGlue]
+display=false
+buttons=1
+event1=EventNext
+[EventNext]
+buttons=1
+event1=
+`,
+      [
+        'EventOpening.text,You arrive.',
+        'EventGlue.text,bookkeeping',
+        'EventNext.text,The door is open.',
+      ],
+    )
+    quest.start()
+    quest.press(0)
+
+    expect(quest.runtime.log.toArray().map((e) => e.entry)).toEqual(['You arrive.'])
   })
 })

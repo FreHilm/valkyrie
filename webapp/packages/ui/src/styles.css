@@ -963,9 +963,9 @@ body {
 /* Missing content, said over the board it is missing from. */
 .vk-play__notices {
   position: absolute;
-  /* Bottom left, clear of both the dialog — which anchors to the top — and
-     the phase buttons, which sit centred above it. */
-  bottom: calc(var(--u) * 0.4);
+  /* Bottom left, clear of the dialog — which anchors to the top — and stacked
+     above the phase bar, whose Items/Set/Log buttons own the corner itself. */
+  bottom: calc(var(--u) * 3.2);
   left: calc(var(--u) * 0.4);
   max-width: min(calc(100% - var(--u) * 12), calc(var(--u) * 20));
   display: flex;
@@ -1003,6 +1003,56 @@ body {
 .vk-play__phase {
   align-items: center;
   gap: calc(var(--u) * 0.3);
+}
+
+/*
+ * The phase bar's menu buttons, `NextStageButton.Update`: Items, Set and Log
+ * laid left to right from the bottom-left corner, on the same row as the phase
+ * controls but anchored rather than centred, which is where the C# puts them.
+ */
+.vk-play__menus {
+  position: absolute;
+  left: calc(var(--u) * 0.5);
+  bottom: calc(var(--u) * 0.5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 0.3);
+}
+/*
+ * Above the dialog layer, not inside it. The C# tags the log window `LOGS` and
+ * the event dialog `DIALOG`, and the log is built later — so it covers the
+ * event still showing behind it, which is the point of the Log button.
+ */
+.vk-play__menu {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: calc(var(--u) * 0.5) calc(var(--u) * 0.5) calc(var(--u) * 3.5);
+  pointer-events: none;
+}
+.vk-play__menu:empty {
+  display: none;
+}
+.vk-play__menu > * {
+  pointer-events: auto;
+  width: min(100%, calc(var(--u) * 30));
+  max-height: 100%;
+  overflow-y: auto;
+  background: var(--vk-surface);
+  border: 1px solid var(--vk-rule);
+  border-radius: var(--vk-radius);
+  padding: var(--vk-gap);
+  box-shadow: 0 calc(var(--u) * 0.2) calc(var(--u) * 0.8) rgb(0 0 0 / 45%);
+}
+
+/* The Set window's two switches, each filling the width so they read as a pair. */
+.vk-set__toggle {
+  width: 100%;
+}
+.vk-set__toggle--on {
+  opacity: 0.65;
 }
 
 /* ---- importing ---- */

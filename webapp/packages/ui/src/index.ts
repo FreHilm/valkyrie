@@ -88,6 +88,13 @@ export type {
   LogLine,
   QuestVariable,
 } from './screens/questLog.js'
+export { setWindow } from './screens/setWindow.js'
+export type {
+  SetWindow,
+  SetWindowOptions,
+  SetWindowStrings,
+  SetWindowView,
+} from './screens/setWindow.js'
 export { inventory } from './screens/inventory.js'
 export type {
   Inventory,

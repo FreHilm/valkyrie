@@ -95,7 +95,11 @@ export function questLog(options: QuestLogOptions): QuestLog {
 
     // Editor notices are for a scenario author, not a player. The C# hides
     // them by returning "" from GetEntry; here they are simply not rendered.
-    const visible = current.entries.filter((entry) => developer || !entry.editor)
+    // An entry with no text is skipped for the same reason `LogWindow.cs:47`
+    // skips it — an event can be answered without having said anything.
+    const visible = current.entries.filter(
+      (entry) => (developer || !entry.editor) && entry.text.trim().length > 0,
+    )
     if (visible.length === 0) {
       element.append(label(strings.empty, { class: 'vk-log__empty' }))
     } else {

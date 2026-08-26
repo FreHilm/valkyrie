@@ -35,11 +35,13 @@ import {
   questLog,
   questSelection,
   rawText,
+  text,
 } from '@valkyrie/ui'
 import {
   ActivationInstance,
   attackTypes,
   DEFAULT_LANGUAGE,
+  ItemData,
   LogEntry,
   MoMPhase,
   randomAttack,
@@ -1017,6 +1019,16 @@ async function play(
     session,
     rich: { symbolOf: (character) => glyphs.get(character) ?? null },
     notices: () => [...missing],
+    // The phase bar and its menus, all `val` keys the game already ships.
+    strings: {
+      items: text(new StringKey('val', 'ITEMS_SMALL')),
+      set: text(new StringKey('val', 'SET')),
+      log: text(new StringKey('val', 'LOG')),
+      setFire: text(new StringKey('val', 'SET_FIRE')),
+      clearFire: text(new StringKey('val', 'CLEAR_FIRE')),
+      eliminated: text(new StringKey('val', 'INVESTIGATOR_ELIMINATED')),
+      close: text(new StringKey('val', 'CLOSE')),
+    },
     sources: questArt({
       content,
       components,
@@ -1070,6 +1082,61 @@ async function play(
         },
         index,
       ),
+    // The three buttons `NextStageButton` puts in the bottom-left corner.
+    menus: {
+      items: {
+        // `InventoryWindowMoM` lists `itemInspect`, which is every item the
+        // quest has granted that has something to read on the back of it.
+        list: () =>
+          [...session.runtime.itemInspect.keys()].map((id) => {
+            const data = content.tryGet(ItemData, id)
+            const file = data === undefined ? null : resolveTexture(data.image)
+            const url = file === null ? null : imageUrl(file)
+            return {
+              id,
+              name: data?.name.translate() ?? id,
+              ...(url === null ? {} : { image: url }),
+            }
+          }),
+        onInspect: (id) => {
+          // `Inspect` queues `itemInspect[item]`, which is the event that says
+          // what examining it turns up.
+          const event = session.runtime.itemInspect.get(id)
+          if (event !== undefined) session.activate(event)
+        },
+      },
+      log: {
+        view: () => ({
+          entries: session.runtime.log.toArray().map((entry) => ({
+            text: entry.entry,
+            editor: entry.editor,
+          })),
+          variables: [...session.runtime.vars.vars.entries()].map(([name, value]) => ({
+            name,
+            value,
+          })),
+        }),
+        onSetVariable: (name, value) => {
+          session.runtime.vars.setValue(name, value)
+        },
+      },
+      set: {
+        view: () => ({
+          fire: session.runtime.vars.getValue('$fire') > 0,
+          eliminated: session.runtime.vars.getValue('#eliminated') > 0,
+          eliminationFinal: session.runtime.vars.getValue('#eliminatedcomplete') > 0.1,
+        }),
+        onFire: (lit) => {
+          session.runtime.vars.setValue('$fire', lit ? 1 : 0)
+        },
+        onEliminated: (eliminated) => {
+          session.runtime.vars.setValue('#eliminated', eliminated ? 1 : 0)
+          // `Uneliminate` clears the round handshake too, or the next
+          // `EndRound` would promote a stale value and eliminate them again.
+          if (!eliminated) session.runtime.vars.setValue('#eliminatedprev', 0)
+        },
+      },
+    },
     questUi: () =>
       questUiElements({
         content,

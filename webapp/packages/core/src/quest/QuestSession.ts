@@ -366,6 +366,17 @@ export class QuestSession {
   /** The player pressed a button. */
   press(index: number): void {
     this.pending = null
+    // `DialogWindow.onButton` writes the text the player just read into the
+    // log before ending the event, escaping its newlines the way a save file
+    // carries them. Only a dialog does this — an invisible event is ended
+    // through `settle`, and the C# never builds a window for one, so the glue
+    // a scenario chains between its pages stays out of the log.
+    const current = this.events.current
+    if (current !== null) {
+      this.runtime.log.add(
+        new LogEntry(this.eventText(current.sectionName).replace(/\n/g, '\\n')),
+      )
+    }
     this.events.endEvent(index)
     this.settle()
   }

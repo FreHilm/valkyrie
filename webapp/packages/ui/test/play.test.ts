@@ -342,3 +342,136 @@ describe('puzzles', () => {
     expect(screen.element.querySelector('canvas')).not.toBeNull()
   })
 })
+
+/**
+ * The phase bar's three menus, from `NextStageButton.Update`.
+ *
+ * The C# draws Items, Set and Log against the bottom-left corner and gates
+ * them on the press: `Items` and `Set` return without doing anything while a
+ * dialog is up, and `Log` carries a comment saying it must always be
+ * available. The bar itself waits for `firstTileDisplayed`.
+ */
+describe('playScreen phase menus', () => {
+  const TILE = [{ name: 'TileFoyer', component: { type: 'Tile' } }]
+
+  const menus = (over: Record<string, unknown> = {}) => ({
+    items: { list: () => [{ id: 'QItemKey', name: 'A rusted key' }], onInspect: vi.fn() },
+    log: { view: () => ({ entries: [{ text: 'You enter.', editor: false }], variables: [] }) },
+    set: {
+      view: () => ({ fire: false, eliminated: false, eliminationFinal: false }),
+      onFire: vi.fn(),
+      onEliminated: vi.fn(),
+    },
+    ...over,
+  })
+
+  function withMenus(
+    view: ReturnType<PlayableSession['view']>,
+    over: Record<string, unknown> = {},
+    boardItems = TILE,
+  ) {
+    const { session: s, calls } = session(view, {
+      runtime: { boardItems: () => boardItems, monsters: [], log: { toArray: () => [] } },
+    })
+    const built = menus(over)
+    const screen = playScreen({ session: s, sources: SOURCES, menus: built })
+    document.body.append(screen.element)
+    return { screen, calls, menus: built }
+  }
+
+  const bar = (screen: { element: HTMLElement }): string[] =>
+    [...screen.element.querySelectorAll('.vk-play__menus button')].map(
+      (b) => b.textContent ?? '',
+    )
+
+  it('puts the three menus on the bar', () => {
+    const { screen } = withMenus({ kind: 'board' })
+
+    expect(bar(screen)).toEqual(['Items', 'Set', 'Log'])
+  })
+
+  it('waits for the board to have a tile on it', () => {
+    // `if (!firstTileDisplayed) return`: the bar does not frame the opening
+    // cutscene, which plays before anything is placed.
+    const { screen } = withMenus({ kind: 'board' }, {}, [
+      { name: 'TokenDoor', component: { type: 'Token' } },
+    ])
+
+    expect(bar(screen)).toEqual([])
+  })
+
+  it('opens the item list, and inspects through the session', () => {
+    const { screen, menus: built } = withMenus({ kind: 'board' })
+    press(screen.element, 'Items')
+
+    const menu = screen.element.querySelector('.vk-play__menu')
+    expect(menu?.textContent).toContain('A rusted key')
+
+    press(menu as HTMLElement, 'A rusted key')
+    expect((built.items.onInspect).mock.calls).toEqual([['QItemKey']])
+    // `Inspect` closes the window first; the event it queues is a dialog, and
+    // the two would otherwise be on screen together.
+    expect(screen.element.querySelector('.vk-play__menu')?.textContent).toBe('')
+  })
+
+  it('shows the log over an event that is still up', () => {
+    // `Log` is the one that does not check for a dialog: a player reads back
+    // what happened while the event asking about it is on screen.
+    const { screen } = withMenus({ kind: 'event', text: 'A door opens.', buttons: [] })
+
+    press(screen.element, 'Log')
+    expect(screen.element.querySelector('.vk-play__menu')?.textContent).toContain('You enter.')
+    expect(screen.element.querySelector('.vk-play__overlay')?.textContent).toContain('A door opens.')
+  })
+
+  it('will not open the items or the set window while a dialog is up', () => {
+    const { screen } = withMenus({ kind: 'event', text: 'A door opens.', buttons: [] })
+
+    const disabled = [...screen.element.querySelectorAll('.vk-play__menus button')].map((b) => [
+      b.textContent,
+      (b as HTMLButtonElement).disabled,
+    ])
+    expect(disabled).toEqual([
+      ['Items', true],
+      ['Set', true],
+      ['Log', false],
+    ])
+  })
+
+  it('switches the fire the scenario reads as $fire', () => {
+    const { screen, menus: built } = withMenus({ kind: 'board' })
+    press(screen.element, 'Set')
+
+    const menu = screen.element.querySelector('.vk-play__menu') as HTMLElement
+    press(menu, 'Set Fire')
+    expect((built.set.onFire).mock.calls).toEqual([[true]])
+  })
+
+  it('will not take back an elimination the quest has already played out', () => {
+    // `Uneliminate` returns without doing anything once `#eliminatedcomplete`
+    // is set, so the button is dead — this says so before the press.
+    const { screen } = withMenus(
+      { kind: 'board' },
+      {
+        set: {
+          view: () => ({ fire: false, eliminated: true, eliminationFinal: true }),
+          onFire: vi.fn(),
+          onEliminated: vi.fn(),
+        },
+      },
+    )
+    press(screen.element, 'Set')
+
+    const menu = screen.element.querySelector('.vk-play__menu') as HTMLElement
+    const toggle = [...menu.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Investigator Eliminated'),
+    )
+    expect(toggle?.disabled).toBe(true)
+  })
+
+  it('takes the bar away once the quest has ended', () => {
+    const { screen } = withMenus({ kind: 'ended' })
+
+    expect(bar(screen)).toEqual([])
+  })
+})

@@ -185,3 +185,26 @@ describe('inventory', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 })
+
+describe('questLog empty entries', () => {
+  it('skips an entry with nothing in it', () => {
+    // `LogWindow.cs:47` trims the newlines off each entry and skips what is
+    // left empty — an event can be answered without having said anything, and
+    // the session logs its text regardless.
+    const log = questLog({ onClose: vi.fn() })
+    log.show({
+      entries: [
+        { text: 'You arrive.', editor: false },
+        { text: '', editor: false },
+        { text: '   ', editor: false },
+        { text: 'The door is open.', editor: false },
+      ],
+      variables: [],
+    })
+
+    expect([...log.element.querySelectorAll('.vk-log__entry')].map((n) => n.textContent)).toEqual([
+      'You arrive.',
+      'The door is open.',
+    ])
+  })
+})

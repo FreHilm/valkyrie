@@ -13,8 +13,14 @@
 
 import { activationDialog } from './activationDialog.js'
 import { eventDialog } from './eventDialog.js'
+import { inventory } from './inventory.js'
+import type { InventoryItem } from './inventory.js'
 import { monsterDialog } from './monsterDialog.js'
 import type { MonsterDialogView } from './monsterDialog.js'
+import { questLog } from './questLog.js'
+import type { QuestLogView } from './questLog.js'
+import { setWindow } from './setWindow.js'
+import type { SetWindowView } from './setWindow.js'
 import { board } from '../board.js'
 import { buildScene } from '../boardScene.js'
 import type { SceneItem, SceneSources } from '../boardScene.js'
@@ -67,6 +73,15 @@ export interface PlayStrings {
   endPhase: Text
   continueLabel: Text
   loading: Text
+  /** `ITEMS_SMALL`, `SET` and `LOG` on the phase bar. */
+  items: Text
+  set: Text
+  log: Text
+  /** `SetWindow`'s two switches, and the `CLOSE` every menu shares. */
+  setFire: Text
+  clearFire: Text
+  eliminated: Text
+  close: Text
 }
 
 const DEFAULT_STRINGS: PlayStrings = {
@@ -75,6 +90,13 @@ const DEFAULT_STRINGS: PlayStrings = {
   endPhase: rawText('Finish the phase'),
   continueLabel: rawText('Continue'),
   loading: rawText('Loading art…'),
+  items: rawText('Items'),
+  set: rawText('Set'),
+  log: rawText('Log'),
+  setFire: rawText('Set Fire'),
+  clearFire: rawText('Clear Fire'),
+  eliminated: rawText('Investigator Eliminated'),
+  close: rawText('Close'),
 }
 
 /** One entry in the monster strip, which is `MonsterCanvas`'s icon list. */
@@ -135,6 +157,34 @@ export interface PlayOptions {
    */
   monsterView?: (index: number, close: () => void) => MonsterDialogView | null
   /**
+   * The three menus on the phase bar, from `NextStageButton`.
+   *
+   * Each is drawn only if supplied, so a shell that shows a board without a
+   * quest behind it gets no buttons it cannot answer. The C# always draws all
+   * three, and gates them on the press instead.
+   */
+  menus?: {
+    /** `Items`, which opens `InventoryWindowMoM`. */
+    items?: {
+      list: () => readonly InventoryItem[]
+      /** `Inspect`: queues the item's inspect event. */
+      onInspect: (id: string) => void
+    }
+    /** `Log`, which opens `LogWindow`. */
+    log?: {
+      view: () => QuestLogView
+      onSetVariable?: (name: string, value: number) => void
+      /** `Game.testMode`: whether the developer view starts open. */
+      developer?: boolean
+    }
+    /** `Set`, which opens `SetWindow`. */
+    set?: {
+      view: () => SetWindowView
+      onFire: (lit: boolean) => void
+      onEliminated: (eliminated: boolean) => void
+    }
+  }
+  /**
    * How quest prose is rendered: its `<i>` and `<b>` as elements, its symbol
    * glyphs as named icons. Every screen this routes to gets the same one.
    */
@@ -164,6 +214,12 @@ export function playScreen(options: PlayOptions): PlayScreen {
 
   const overlay = el('div', { class: 'vk-play__overlay' })
   const controls = el('div', { class: 'vk-play__controls', attrs: { role: 'group' } })
+  // `NextStageButton` draws these against the left edge, under whatever dialog
+  // is up rather than inside it — they are tagged `UIPHASE`, and a dialog is
+  // `DIALOG`. Two layers here for the same reason: a menu opens over the event
+  // that is still showing behind it.
+  const menuBar = el('div', { class: 'vk-play__menus', attrs: { role: 'group' } })
+  const menuLayer = el('div', { class: 'vk-play__menu' })
   const surface = el('div', { class: 'vk-play__board' })
 
   const view = board({
@@ -222,6 +278,58 @@ export function playScreen(options: PlayOptions): PlayScreen {
     },
   })
 
+  /** Which of the three phase-bar menus is open, if any. */
+  let openMenu: 'items' | 'set' | 'log' | null = null
+
+  function closeMenu(): void {
+    openMenu = null
+    refresh()
+  }
+
+  const items = inventory({
+    onInspect: (id) => {
+      // `Inspect` closes the window before queueing, because the event that
+      // follows is a dialog and the two would otherwise be on screen at once.
+      openMenu = null
+      options.menus?.items?.onInspect(id)
+      refresh()
+    },
+    onClose: closeMenu,
+    strings: { title: strings.items, close: strings.close },
+  })
+
+  const log = questLog({
+    onClose: closeMenu,
+    ...rich,
+    ...(options.menus?.log?.developer === undefined
+      ? {}
+      : { developer: options.menus.log.developer }),
+    onSetVariable: (name, value) => {
+      options.menus?.log?.onSetVariable?.(name, value)
+      refresh()
+    },
+    strings: { title: strings.log, close: strings.close },
+  })
+
+  const set = setWindow({
+    onFire: (lit) => {
+      options.menus?.set?.onFire(lit)
+      refresh()
+    },
+    onEliminated: (eliminated) => {
+      options.menus?.set?.onEliminated(eliminated)
+      refresh()
+    },
+    onClose: closeMenu,
+    strings: {
+      title: strings.set,
+      setFire: strings.setFire,
+      clearFire: strings.clearFire,
+      eliminated: strings.eliminated,
+      close: strings.close,
+    },
+  })
+
   const questUi = questUiLayer({
     ...rich,
     onSelect: (name) => {
@@ -236,7 +344,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
   // dialog covers it rather than the other way round.
   const element = panel({
     class: 'vk-play',
-    children: [surface, questUi.element, monsters, notices, overlay, controls],
+    children: [surface, questUi.element, monsters, notices, overlay, menuLayer, controls, menuBar],
   })
 
   /** Art already requested, so a redraw does not re-request it. */
@@ -324,6 +432,80 @@ export function playScreen(options: PlayOptions): PlayScreen {
     }
   }
 
+  /**
+   * The phase bar's three menu buttons, from `NextStageButton.Update`.
+   *
+   * `Items` and `Set` return without doing anything while a dialog is up, and
+   * `Log` carries a comment saying it must always be available. Disabling is
+   * this port's way of saying the first part before the press rather than
+   * after it.
+   */
+  function drawMenuBar(kind: string): void {
+    clear(menuBar)
+    // `if (!firstTileDisplayed) return`: the bar waits for the board to have
+    // something on it, so the opening cutscene is not framed by chrome. The
+    // port reads that off the board rather than keeping the flag.
+    const onBoard = session
+      .runtime.boardItems()
+      .some((item) => item.component.type === 'Tile')
+    if (!onBoard) return
+
+    const dialogUp = kind !== 'board'
+    const menus = options.menus
+    if (menus === undefined) return
+
+    if (menus.items !== undefined) {
+      menuBar.append(
+        button(strings.items, {
+          onPress: () => {
+            openMenu = 'items'
+            refresh()
+          },
+          ...(dialogUp ? { disabled: true } : {}),
+        }),
+      )
+    }
+    if (menus.set !== undefined) {
+      menuBar.append(
+        button(strings.set, {
+          onPress: () => {
+            openMenu = 'set'
+            refresh()
+          },
+          ...(dialogUp ? { disabled: true } : {}),
+        }),
+      )
+    }
+    if (menus.log !== undefined) {
+      menuBar.append(
+        button(strings.log, {
+          onPress: () => {
+            openMenu = 'log'
+            refresh()
+          },
+        }),
+      )
+    }
+  }
+
+  /** The open menu, drawn over whatever dialog is already showing. */
+  function drawMenu(): void {
+    clear(menuLayer)
+    const menus = options.menus
+    if (openMenu === 'items' && menus?.items !== undefined) {
+      items.show(menus.items.list())
+      menuLayer.append(items.element)
+    } else if (openMenu === 'log' && menus?.log !== undefined) {
+      log.show(menus.log.view())
+      menuLayer.append(log.element)
+    } else if (openMenu === 'set' && menus?.set !== undefined) {
+      set.show(menus.set.view())
+      menuLayer.append(set.element)
+    } else {
+      openMenu = null
+    }
+  }
+
   function refresh(): void {
     drawBoard()
     clear(overlay)
@@ -334,8 +516,21 @@ export function playScreen(options: PlayOptions): PlayScreen {
     // Before anything is drawn: what is on screen belongs to the scenario
     // being left, and the next one is not loaded yet.
     if (current.kind === 'changeQuest') {
+      clear(menuBar)
+      clear(menuLayer)
       if (current.path !== undefined) options.onChangeQuest?.(current.path)
       return
+    }
+
+    // Before the dispatch below, which returns early for every kind: the bar
+    // outlives the dialogs, and the menu is drawn last so it sits over them.
+    if (current.kind === 'ended') {
+      clear(menuBar)
+      clear(menuLayer)
+      openMenu = null
+    } else {
+      drawMenuBar(current.kind)
+      drawMenu()
     }
 
     if (current.kind === 'event') {
