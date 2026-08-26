@@ -140,6 +140,17 @@ export class QuestRuntime {
   }
 
   /**
+   * `InvestigatorItems` dealing out what the party begins with.
+   *
+   * Separate from `add`, which places a board component: these are cards in
+   * people's hands before the scenario has run an event.
+   */
+  giveItem(item: string, inspect?: string): void {
+    this.heldItems.add(item)
+    if (inspect !== undefined && inspect.length > 0) this.itemInspect.set(item, inspect)
+  }
+
+  /**
    * `Quest.Add`. Adding something already present is a no-op, which is what
    * lets an event be triggered more than once safely.
    *

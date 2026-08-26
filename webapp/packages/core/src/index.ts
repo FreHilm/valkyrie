@@ -223,6 +223,16 @@ export {
   characterMap,
   symbolNames,
 } from './quest/symbols.js'
+export { attemptItemMatch, fameLevel, generateItemSelection } from './quest/itemSelection.js'
+export { startingItems } from './quest/itemSelection.js'
+export type {
+  ItemSelectionContext,
+  QItemView,
+  SelectableItem,
+  StartingHero,
+  StartingItems,
+  StartingItemsContext,
+} from './quest/itemSelection.js'
 export { packsToLoad, packVariables } from './content/packSelection.js'
 export type { SelectablePack } from './content/packSelection.js'
 export type { AudioRequest, CameraCommand } from './quest/EventManager.js'

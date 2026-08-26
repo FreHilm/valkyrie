@@ -412,6 +412,11 @@ export class QuestSession {
     return this.runtime.vars.test(button.condition)
   }
 
+  /** Records a setup problem in the quest log, as the C# logs one. */
+  logWarning(message: string): void {
+    this.warn(message)
+  }
+
   private warn(message: string): void {
     this.runtime.log.add(new LogEntry(message, true))
   }
