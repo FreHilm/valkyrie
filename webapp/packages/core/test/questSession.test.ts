@@ -285,6 +285,35 @@ buttons=0
     expect(quest.runtime.has('UIContinue1')).toBe(false)
   })
 
+  it('runs an invisible Defeated event without showing it', () => {
+    const quest = session(`[EventIdle]
+[EventLoot]
+trigger=DefeatedMonsterZombie
+display=false
+buttons=0
+add=TokenLoot
+[TokenLoot]
+buttons=1
+event1=
+`)
+    quest.runtime.monsters.push({
+      monsterName: 'MonsterZombie',
+      spawnedBy: 'SpawnA',
+      unique: false,
+      health: 0,
+      damage: 0,
+      activated: false,
+      minionStarted: false,
+      masterStarted: false,
+      currentActivation: null,
+    })
+
+    quest.defeat(quest.runtime.monsters[0]!)
+
+    expect(quest.view().kind).toBe('board')
+    expect(quest.runtime.has('TokenLoot')).toBe(true)
+  })
+
   it('moves into the mythos phase when the investigators finish', () => {
     const quest = session('[EventIdle]\n')
     quest.investigatorsDone()

@@ -379,6 +379,9 @@ export class QuestSession {
   defeat(monster: MonsterInstance): void {
     this.pending = null
     this.rounds.defeated(monster)
+    // `defeated` fires `Defeated<type>` and `Defeated<spawn>`, and a scenario
+    // usually writes those as invisible events that drop loot or open a door.
+    this.settle()
   }
 
   /** Advances the round when the engine allows it. */
