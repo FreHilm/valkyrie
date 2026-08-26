@@ -1204,6 +1204,22 @@ async function contentSelectScreen(): Promise<void> {
   const paths = libraryPaths(storage)
   const config = await loadConfig(fs, storage, autoSaveConfig(fs, storage))
 
+  // The art is a file in storage; an <img> needs a URL, so each is read once
+  // and kept for as long as the screen is up.
+  const urls = new Map<string, string>()
+  async function artFor(file: string): Promise<string | null> {
+    if (file.length === 0) return null
+    const known = urls.get(file)
+    if (known !== undefined) return known
+    try {
+      const url = URL.createObjectURL(new Blob([new Uint8Array(await fs.readBytes(file))]))
+      urls.set(file, url)
+      return url
+    } catch {
+      return null
+    }
+  }
+
   const screen = contentSelect({
     onToggle: (id) => {
       if (config.getPacks('MoM').includes(id)) config.removePack('MoM', id)
@@ -1225,13 +1241,19 @@ async function contentSelectScreen(): Promise<void> {
 
   async function render(): Promise<void> {
     screen.show({
-      packs: found.available.map((pack) => ({
-        id: pack.id,
-        // `GetContentName`: the ini holds a key, and an id with no `{` may
-        // still have a name in the `pck` dictionary the base pack carries.
-        name: found.content.getContentName(pack.id),
-        type: pack.type,
-      })),
+      packs: await Promise.all(
+        found.available.map(async (pack) => {
+          const art = await artFor(pack.image)
+          return {
+            id: pack.id,
+            // `GetContentName`: the ini holds a key, and an id with no `{` may
+            // still have a name in the `pck` dictionary the base pack carries.
+            name: found.content.getContentName(pack.id),
+            type: pack.type,
+            ...(art === null ? {} : { image: art }),
+          }
+        }),
+      ),
       selected: new Set(config.getPacks('MoM')),
       baseId: BASE_PACK_ID,
     })
@@ -1239,6 +1261,10 @@ async function contentSelectScreen(): Promise<void> {
 
   await render()
   show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
+  onLeave(() => {
+    for (const url of urls.values()) URL.revokeObjectURL(url)
+    urls.clear()
+  })
 }
 
 /** Options, writing through to a real ConfigFile as the C# does. */

@@ -35,7 +35,14 @@ export interface LoadedContent {
   /** Pack directories that were read, for reporting. */
   packs: string[]
   /** Every pack found, whether or not it was loaded. */
-  available: { id: string; name: string; type: string; clone: readonly string[] }[]
+  available: {
+    id: string
+    name: string
+    type: string
+    /** Box art, already resolved against the pack or the import. */
+    image: string
+    clone: readonly string[]
+  }[]
   /** The ids actually loaded, which is what a scenario tests for. */
   loaded: string[]
 }
@@ -165,6 +172,9 @@ export async function loadContent(fs: FileSystem, options: ContentOptions): Prom
       id: pack.id,
       name: pack.name,
       type: pack.type,
+      // A pack names its art either beside itself or in the import, and the
+      // resolver already covers both roots.
+      image: resolve(pack.image ?? '') ?? '',
       clone: pack.clone,
     })),
     loaded,

@@ -294,13 +294,16 @@ body {
 }
 .vk-packs {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 8), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 13), 1fr));
   gap: calc(var(--u) * 0.4);
 }
+/* Art on the left, name beside it, as `ContentSelectScreen` lays out a row:
+   a square image six units across with the name to its right. */
 .vk-pack {
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--u) * 0.15);
+  display: grid;
+  grid-template-columns: calc(var(--u) * 4) 1fr;
+  align-items: center;
+  gap: calc(var(--u) * 0.5);
   padding: calc(var(--u) * 0.4);
   font: inherit;
   text-align: left;
@@ -321,16 +324,29 @@ body {
   cursor: default;
 }
 .vk-pack__art {
+  grid-row: span 2;
   width: 100%;
-  height: auto;
+  aspect-ratio: 1;
+  /* Box shots are not all square; contain rather than crop the art. */
+  object-fit: contain;
   border-radius: var(--vk-radius);
+}
+/* Without art the name still starts in the second column, so a pack that has
+   none lines up with the ones that do. */
+.vk-pack__name {
+  grid-column: 2;
+}
+.vk-pack__state {
+  grid-column: 2;
 }
 .vk-pack__name {
   font-weight: 600;
+  text-align: left;
 }
 .vk-pack__state {
   font-size: var(--vk-text-small);
   color: var(--vk-text-soft);
+  text-align: left;
 }
 .vk-pack:focus-visible {
   outline: 3px solid var(--vk-focus);
