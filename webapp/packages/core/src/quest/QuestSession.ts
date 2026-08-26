@@ -14,6 +14,7 @@
 import { ActivationInstance } from './ActivationInstance.js'
 import type { ActivationView } from './ActivationInstance.js'
 import { EventManager } from './EventManager.js'
+import type { CameraCommand } from './EventManager.js'
 import { QuestRuntime } from './QuestRuntime.js'
 import type { MonsterInstance } from './QuestRuntime.js'
 import { MoMPhase, RoundControllerMoM, roundToInt } from './RoundController.js'
@@ -87,6 +88,12 @@ export interface SessionOptions {
    * synchronous and a filesystem behind promises is not.
    */
   isQuestTransition?: (name: string) => boolean
+  /**
+   * Where an event asks the camera to look, or how far it may be panned.
+   * Pushed rather than pulled through `view()`, because it is an instruction
+   * that happens once rather than a state the screen can re-read.
+   */
+  camera?: (command: CameraCommand) => void
   /**
    * Content monsters, in the order the content data yields them. Without them
    * a spawn that names a content type — which is most of them — resolves to
@@ -162,6 +169,7 @@ export class QuestSession {
       startQuest: (path) => {
         this.pendingQuest = path
       },
+      ...(options.camera === undefined ? {} : { camera: options.camera }),
       rounds: {
         inMonsterPhase: () => this.rounds.inMonsterPhase(),
         monsterActivated: () => this.rounds.monsterActivated(),

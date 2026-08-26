@@ -22,6 +22,7 @@ import {
   QItem,
   QuestComponent,
   QuestEvent,
+  QuestUI,
   Spawn,
   Tile,
   Token,
@@ -133,6 +134,13 @@ export function questEvents(
     }
     if (component.operations !== null) definition.operations = component.operations
     if (component.audio.length > 0) definition.audio = component.audio
+    if (component.location !== null) {
+      definition.location = component.location
+      definition.locationSpecified = component.locationSpecified
+      definition.minCam = component.minCam
+      definition.maxCam = component.maxCam
+      definition.isUi = component instanceof QuestUI
+    }
     result.set(name, definition)
   }
   return result

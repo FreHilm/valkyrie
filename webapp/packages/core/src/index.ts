@@ -223,6 +223,7 @@ export {
   characterMap,
   symbolNames,
 } from './quest/symbols.js'
+export type { CameraCommand } from './quest/EventManager.js'
 export { needsRichText, parseRichText } from './quest/richText.js'
 export type { RichSpan, RichStyle } from './quest/richText.js'
 export type { SymbolContext } from './quest/symbols.js'

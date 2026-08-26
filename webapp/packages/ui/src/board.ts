@@ -56,6 +56,10 @@ export interface Board {
   invalidate: () => void
   /** Points the camera at everything currently on the board. */
   frameAll: () => void
+  /** `CameraController.SetCamera`: centre here and reset to the standard zoom. */
+  lookAt: (point: Point) => void
+  /** `SetCameraMin` / `SetCameraMax`: how far the player may pan. */
+  limitTo: (edge: 'min' | 'max', point: Point) => void
   itemAt: (screen: Point) => BoardItem | null
   destroy: () => void
 }
@@ -76,6 +80,8 @@ export function board(options: BoardOptions): Board {
     },
   })
   const camera = new BoardCamera(options.limits)
+  /** An aim taken before the canvas had a size; applied on the first resize. */
+  let deferredLook: Point | null = null
   let items: readonly BoardItem[] = []
   let frame = 0
 
@@ -131,6 +137,14 @@ export function board(options: BoardOptions): Board {
     const dpr = globalThis.devicePixelRatio || 1
     canvas.width = Math.max(1, Math.round(rect.width * dpr))
     canvas.height = Math.max(1, Math.round(rect.height * dpr))
+    // A quest aims the camera while it is starting, before the canvas has been
+    // laid out and while its size is still zero — so the aim is held and taken
+    // the moment there is a viewport to take it against.
+    if (deferredLook !== null && canvas.width > 1 && canvas.height > 1) {
+      const at = deferredLook
+      deferredLook = null
+      camera.lookAt(at, viewport())
+    }
     invalidate()
   })
   resize.observe(canvas)
@@ -140,6 +154,17 @@ export function board(options: BoardOptions): Board {
     camera,
     setItems,
     invalidate,
+    lookAt: (point) => {
+      if (canvas.width <= 1 || canvas.height <= 1) deferredLook = point
+      else camera.lookAt(point, viewport())
+      invalidate()
+    },
+
+    limitTo: (edge, point) => {
+      camera.limitTo(edge, point)
+      invalidate()
+    },
+
     frameAll: () => {
       const box = itemsBounds(items)
       if (box !== null) camera.frame(box, viewport())

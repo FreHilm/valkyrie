@@ -20,6 +20,7 @@ import { buildScene } from '../boardScene.js'
 import type { SceneItem, SceneSources } from '../boardScene.js'
 import { questUiLayer } from '../questUiLayer.js'
 import type { RichTextOptions } from '../richText.js'
+import type { CameraCommand } from '@valkyrie/core'
 import type { QuestUiElement } from '../questUiLayer.js'
 import { button, label, panel } from '../components.js'
 import { clear, el } from '../dom.js'
@@ -143,6 +144,8 @@ export interface PlayScreen {
   element: HTMLElement
   /** Re-reads the session and redraws. Call after anything that changes it. */
   refresh: () => void
+  /** Applies what an event asked of the camera. */
+  camera: (command: CameraCommand) => void
   destroy: () => void
 }
 
@@ -429,11 +432,18 @@ export function playScreen(options: PlayOptions): PlayScreen {
   }
 
   refresh()
-  view.frameAll()
+  // Where `ChangeQuest` puts it: the origin, at the standard zoom. Framing
+  // everything instead would start every quest at whatever scale fits the
+  // board it has not placed yet, which is as far out as it goes.
+  view.lookAt({ x: 0, y: 0 })
 
   return {
     element,
     refresh,
+    camera: (command) => {
+      if (command.kind === 'look') view.lookAt(command.at)
+      else view.limitTo(command.kind, command.at)
+    },
     destroy: () => {
       view.destroy()
       questUi.destroy()

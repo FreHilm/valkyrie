@@ -23,6 +23,17 @@ export interface CameraLimits {
   maxScale: number
 }
 
+/**
+ * How much board a scenario expects to be looking at, in squares.
+ *
+ * `CameraController.SetCamera` puts the camera at `z = -8` and the scene's
+ * camera is a 60-degree perspective one (`Game.unity:521`), so the plane at
+ * `z = 0` shows `2 * 8 * tan(30°)` squares from top to bottom. Every event
+ * that moves the camera resets to exactly this, which is why a scenario can
+ * rely on what will be in shot.
+ */
+export const STANDARD_VIEW_SQUARES = 16 * Math.tan(Math.PI / 6)
+
 export const DEFAULT_LIMITS: CameraLimits = {
   minX: -50,
   maxX: 50,
@@ -51,7 +62,12 @@ export class BoardCamera {
   /** Screen pixels per board square. */
   scale = 40
 
-  constructor(private readonly limits: CameraLimits = DEFAULT_LIMITS) {}
+  private readonly limits: CameraLimits
+
+  // Copied, because `limitTo` writes to it and the default is shared.
+  constructor(limits: CameraLimits = DEFAULT_LIMITS) {
+    this.limits = { ...limits }
+  }
 
   toScreen(point: { x: number; y: number }, viewport: Viewport): { x: number; y: number } {
     return {
@@ -98,6 +114,42 @@ export class BoardCamera {
       const fit = Math.min(viewport.width / box.width, viewport.height / box.height)
       // A margin, so the outermost tiles are not flush with the edge.
       this.scale = clamp(fit * 0.9, this.limits.minScale, this.limits.maxScale)
+    }
+    this.clamp()
+  }
+
+  /**
+   * `CameraController.SetCamera`: centre on a point and reset the zoom.
+   *
+   * The reset is the part that matters. A scenario says "look here" and knows
+   * what will be in shot, however far the player had zoomed out — so this is
+   * not a pan, and a caller wanting one should set `centre` directly.
+   */
+  lookAt(point: { x: number; y: number }, viewport: Viewport): void {
+    this.centre = { x: point.x, y: point.y }
+    if (viewport.height > 0) {
+      this.scale = clamp(
+        viewport.height / STANDARD_VIEW_SQUARES,
+        this.limits.minScale,
+        this.limits.maxScale,
+      )
+    }
+    this.clamp()
+  }
+
+  /**
+   * `SetCameraMin` / `SetCameraMax`: how far the player may pan.
+   *
+   * Rounded, as the C# rounds them, and applied to where the camera already
+   * is — a limit that excludes the current position moves it.
+   */
+  limitTo(edge: 'min' | 'max', point: { x: number; y: number }): void {
+    if (edge === 'min') {
+      this.limits.minX = Math.round(point.x)
+      this.limits.minY = Math.round(point.y)
+    } else {
+      this.limits.maxX = Math.round(point.x)
+      this.limits.maxY = Math.round(point.y)
     }
     this.clamp()
   }

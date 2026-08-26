@@ -35,7 +35,22 @@ export interface EventDefinition {
   audio?: string
   /** `randomEvents`: pick one chained event at random rather than the first. */
   randomEvents: boolean
+  /** `xposition`/`yposition`, when the event carries them. */
+  location?: { x: number; y: number }
+  /** Set when the position is a place to look rather than a pan limit. */
+  locationSpecified?: boolean
+  /** `mincam` / `maxcam`: the position bounds how far the player may pan. */
+  minCam?: boolean
+  maxCam?: boolean
+  /** A `UI` component's position places the element, not the camera. */
+  isUi?: boolean
 }
+
+/** What an event asks of the camera. `CameraController`'s three setters. */
+export type CameraCommand =
+  | { kind: 'look'; at: { x: number; y: number } }
+  | { kind: 'min'; at: { x: number; y: number } }
+  | { kind: 'max'; at: { x: number; y: number } }
 
 /**
  * What the engine needs from the wider game.
@@ -52,6 +67,8 @@ export interface EventContext {
    * Whether a name refers to another quest file rather than an event. The C#
    * probes the filesystem; the caller decides here.
    */
+  /** Where an event asks the camera to look, or how far it may be panned. */
+  camera?: (command: CameraCommand) => void
   isQuestTransition?: (name: string) => boolean
   /**
    * A scenario is handing over to another one, named by a path relative to
@@ -300,6 +317,19 @@ export class EventManager {
 
     if (event.addComponents !== undefined) runtime.add(event.addComponents)
     if (event.removeComponents !== undefined) runtime.remove(event.removeComponents)
+
+    // After the board changes and in this order, as `EventManager.cs:304`
+    // does it: a position on an ordinary event says where to look, and one on
+    // an event carrying `mincam`/`maxcam` bounds the panning instead. A `UI`
+    // element's position places the element and never the camera.
+    const at = event.location
+    if (at !== undefined) {
+      if (event.locationSpecified === true && event.isUi !== true) {
+        this.context.camera?.({ kind: 'look', at })
+      }
+      if (event.minCam === true) this.context.camera?.({ kind: 'min', at })
+      if (event.maxCam === true) this.context.camera?.({ kind: 'max', at })
+    }
   }
 
   private warn(message: string): void {

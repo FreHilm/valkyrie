@@ -46,7 +46,13 @@ import {
   StringKey,
   symbolNames,
 } from '@valkyrie/core'
-import type { ActivationView, AttackView, EventsView, MonsterInstance } from '@valkyrie/core'
+import type {
+  ActivationView,
+  AttackView,
+  CameraCommand,
+  EventsView,
+  MonsterInstance,
+} from '@valkyrie/core'
 import {
   canPickDirectory,
   canvasTextureEncoder,
@@ -845,8 +851,20 @@ async function play(
   questRoot: string = questPath,
 ): Promise<void> {
   stage('play: loading quest', questPath)
+  // Queued rather than applied: the events that aim the camera run while the
+  // quest is starting, before there is a screen to aim. `screen.refresh()`
+  // drains them once there is.
+  const pendingCamera: CameraCommand[] = []
+  let aim = (command: CameraCommand): void => {
+    pendingCamera.push(command)
+  }
   const { session, resolveTexture, content, components, gameType, pixelsPerSquare } =
-    await startQuest(fs, paths, questPath, { questRoot })
+    await startQuest(fs, paths, questPath, {
+      questRoot,
+      camera: (command) => {
+        aim(command)
+      },
+    })
   stage('play: quest loaded')
   session.runtime.heroes.push(
     { heroName: 'HeroAshcanPete', activated: false },
@@ -996,6 +1014,14 @@ async function play(
       return image
     },
   })
+
+  // Everything the quest asked for while it was starting, now that there is
+  // something to ask. From here the session aims the camera directly.
+  for (const command of pendingCamera) screen.camera(command)
+  pendingCamera.length = 0
+  aim = (command) => {
+    screen.camera(command)
+  }
 
   show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
   onLeave(() => {

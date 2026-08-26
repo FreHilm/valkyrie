@@ -10,6 +10,7 @@
 
 import { loadContent, loadQuest, textureResolver } from '@valkyrie/platform'
 import type { FileSystem, StoragePaths } from '@valkyrie/platform'
+import type { CameraCommand } from '@valkyrie/core'
 import { bundleQuest, QuestSession } from '@valkyrie/core'
 import type { ContentData, QuestComponent, TraitedMonster } from '@valkyrie/core'
 
@@ -152,6 +153,8 @@ export async function startQuest(
      * rather than beneath itself.
      */
     questRoot?: string
+    /** Where an event asks the camera to look. */
+    camera?: (command: CameraCommand) => void
   } = {},
 ): Promise<StartedQuest> {
   // Content first, quest second: both register dictionaries, and the
@@ -195,6 +198,7 @@ export async function startQuest(
     gameType,
     localization: content.context.localization,
     isQuestTransition: (name) => nested.has(normaliseQuestPath(name)),
+    ...(options.camera === undefined ? {} : { camera: options.camera }),
   })
 
   return {
