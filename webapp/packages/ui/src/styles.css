@@ -368,10 +368,10 @@ body {
  * is optional — the element removes itself if the file is not there.
  */
 .vk-shell__logo {
-  position: absolute;
+  position: fixed;
   top: calc(var(--u) * 0.4);
   right: calc(var(--u) * 0.8);
-  width: min(34%, calc(var(--u) * 15));
+  width: min(24%, calc(var(--u) * 15));
   height: auto;
   pointer-events: none;
   filter: drop-shadow(0 calc(var(--u) * 0.1) calc(var(--u) * 0.4) rgb(0 0 0 / 70%));

@@ -24,11 +24,14 @@ coverage/
 *.png
 *.jpg
 *.jpeg
-# Authored artwork gets one obvious home, exempt from the rule above. Anything
-# imported has no business here, and anything here has to be put there on
+# Authored artwork gets two homes, exempt from the rule above: icons, and the
+# menu's own cover and lockup, which are served rather than bundled. Anything
+# imported has no business in either, and anything here has to be put there on
 # purpose.
 !packages/app/icons/
 !packages/app/icons/**
+!packages/app/public/menu-cover.webp
+!packages/app/public/menu-logo.webp
 # Audio
 *.fsb
 *.bank
