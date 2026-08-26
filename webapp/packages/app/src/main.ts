@@ -181,10 +181,21 @@ function menu(): void {
     '--vk-menu-cover',
     `url("${new URL('menu-cover.webp', document.baseURI).href}")`,
   )
+  const logo = el('img', {
+    class: 'vk-shell__logo',
+    // Decorative: the heading beside it already names the app.
+    attrs: { src: new URL('menu-logo.webp', document.baseURI).href, alt: '' },
+  })
+  // Absent artwork is the supported case, so it takes itself off the page
+  // rather than leaving a broken-image icon in the corner.
+  logo.addEventListener('error', () => {
+    logo.remove()
+  })
   show(
     panel({
       class: 'vk-shell vk-shell--menu',
       children: [
+        logo,
         label(rawText('Valkyrie'), { size: 'large', heading: 1 }),
         label(rawText(`Web port · ${__VALKYRIE_VERSION__}`), { class: 'vk-shell__version' }),
         mainMenu({

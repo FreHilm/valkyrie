@@ -325,13 +325,9 @@ body {
  *
  * The background is fixed and painted behind the content rather than set on
  * the panel, so it fills the viewport whatever the menu's height is.
- *
- * The artwork itself is optional and is not in the repository: drop one at
- * `packages/app/public/menu-cover.webp` and the app points `--vk-menu-cover`
- * at it. Without one the browser drops that layer and the gradients below are
- * what shows, which is a finished-looking screen rather than a broken one.
  */
 .vk-shell--menu {
+  position: relative;
   background: transparent;
   border-color: transparent;
   color: #f2ece1;
@@ -348,25 +344,46 @@ body {
        sinks it so the app's own wordmark sits on quiet ground rather than
        across it. */
     radial-gradient(
-      ellipse 58% 46% at 2% -4%,
-      rgb(8 6 12 / 97%) 0%,
-      rgb(8 6 12 / 90%) 40%,
-      rgb(8 6 12 / 55%) 70%,
+      ellipse 70% 55% at 0% 0%,
+      rgb(8 6 12 / 94%) 0%,
+      rgb(8 6 12 / 70%) 45%,
       transparent 100%
     ),
-    /* A vignette rather than a one-sided wash: the menu is centred, so the
-       quiet ground has to be in the middle and the corners are what keep
-       their light. */
-    radial-gradient(
-        ellipse 65% 75% at 50% 45%,
-        rgb(8 6 12 / 62%) 0%,
-        rgb(8 6 12 / 30%) 65%,
-        transparent 100%
-      ),
-    linear-gradient(rgb(8 6 12 / 34%), rgb(8 6 12 / 48%)),
+    linear-gradient(
+      100deg,
+      rgb(8 6 12 / 86%) 0%,
+      rgb(8 6 12 / 68%) 30%,
+      rgb(8 6 12 / 26%) 60%,
+      rgb(8 6 12 / 12%) 100%
+    ),
     var(--vk-menu-cover, none) center / cover no-repeat;
   background-color: #0b0910;
 }
+/*
+ * The title lockup, out of the flow in the top-right corner.
+ *
+ * Positioned rather than laid out because the menu column is centred and the
+ * heading is at the left: putting the logo in the same flex column would move
+ * both. It goes at `packages/app/public/menu-logo.webp` and, like the cover,
+ * is optional — the element removes itself if the file is not there.
+ */
+.vk-shell__logo {
+  position: absolute;
+  top: calc(var(--u) * 0.4);
+  right: calc(var(--u) * 0.8);
+  width: min(34%, calc(var(--u) * 15));
+  height: auto;
+  pointer-events: none;
+  filter: drop-shadow(0 calc(var(--u) * 0.1) calc(var(--u) * 0.4) rgb(0 0 0 / 70%));
+}
+/* Below this the centred menu and the logo would be fighting for the same
+   width, and the menu is the part that has to stay usable. */
+@media (max-width: 40rem) {
+  .vk-shell__logo {
+    display: none;
+  }
+}
+
 .vk-shell--menu > .vk-text {
   color: #f6f1e6;
   text-shadow: 0 calc(var(--u) * 0.06) calc(var(--u) * 0.3) rgb(0 0 0 / 85%);
@@ -396,7 +413,18 @@ body {
   margin-right: auto;
   width: 50%;
   min-width: 500px;
+  animation: fade-in 4s ease-out 0s both;
 }
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .vk-quest-details {
   max-width: calc(var(--u) * 26);
 }
