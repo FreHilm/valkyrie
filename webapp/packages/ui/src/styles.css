@@ -315,9 +315,87 @@ body {
 }
 
 /* ---- menus and quest browsing ---- */
+/*
+ * The title screen.
+ *
+ * The artwork is dark in both themes, so this one screen commits to a
+ * light-on-dark treatment rather than following the viewer's: a scrim keeps
+ * the column readable wherever the picture happens to be bright, and the menu
+ * sits on it as a translucent panel so the art carries on behind.
+ *
+ * The background is fixed and painted behind the content rather than set on
+ * the panel, so it fills the viewport whatever the menu's height is.
+ *
+ * The artwork itself is optional and is not in the repository: drop one at
+ * `packages/app/public/menu-cover.webp` and the app points `--vk-menu-cover`
+ * at it. Without one the browser drops that layer and the gradients below are
+ * what shows, which is a finished-looking screen rather than a broken one.
+ */
+.vk-shell--menu {
+  background: transparent;
+  border-color: transparent;
+  color: #f2ece1;
+  min-height: 100dvh;
+  isolation: isolate;
+}
+.vk-shell--menu::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    /* The artwork carries a title of its own in its top-left corner. This
+       sinks it so the app's own wordmark sits on quiet ground rather than
+       across it. */
+    radial-gradient(
+      ellipse 58% 46% at 2% -4%,
+      rgb(8 6 12 / 97%) 0%,
+      rgb(8 6 12 / 90%) 40%,
+      rgb(8 6 12 / 55%) 70%,
+      transparent 100%
+    ),
+    /* A vignette rather than a one-sided wash: the menu is centred, so the
+       quiet ground has to be in the middle and the corners are what keep
+       their light. */
+    radial-gradient(
+        ellipse 65% 75% at 50% 45%,
+        rgb(8 6 12 / 62%) 0%,
+        rgb(8 6 12 / 30%) 65%,
+        transparent 100%
+      ),
+    linear-gradient(rgb(8 6 12 / 34%), rgb(8 6 12 / 48%)),
+    var(--vk-menu-cover, none) center / cover no-repeat;
+  background-color: #0b0910;
+}
+.vk-shell--menu > .vk-text {
+  color: #f6f1e6;
+  text-shadow: 0 calc(var(--u) * 0.06) calc(var(--u) * 0.3) rgb(0 0 0 / 85%);
+}
+.vk-shell--menu .vk-shell__version {
+  color: #c9c0ae;
+}
+.vk-shell--menu .vk-menu {
+  background: rgb(14 12 18 / 62%);
+  border-color: rgb(246 241 230 / 18%);
+  box-shadow: 0 calc(var(--u) * 0.3) calc(var(--u) * 1.2) rgb(0 0 0 / 55%);
+}
+@supports (backdrop-filter: blur(1px)) {
+  .vk-shell--menu .vk-menu {
+    background: rgb(14 12 18 / 42%);
+    backdrop-filter: blur(calc(var(--u) * 0.4)) saturate(120%);
+  }
+}
+.vk-shell--menu .vk-menu > .vk-text {
+  color: #f6f1e6;
+}
+
 .vk-menu {
   max-width: calc(var(--u) * 16);
   gap: calc(var(--u) * 0.4);
+  margin-left: auto;
+  margin-right: auto;
+  width: 50%;
+  min-width: 500px;
 }
 .vk-quest-details {
   max-width: calc(var(--u) * 26);

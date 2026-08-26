@@ -170,9 +170,20 @@ function menu(): void {
       `Stopped at: ${died.what}${died.detail === undefined ? '' : `\n${died.detail}`}`,
     )
   }
+  // Optional artwork, served from `public/` rather than bundled: the file is
+  // not in the repository, and a static import of a missing one fails the
+  // build. Absent, the browser drops the layer and the gradients below it are
+  // what shows — so the screen still looks deliberate rather than broken.
+  //
+  // Resolved against `document.baseURI` because the build is relative-based
+  // (`base: './'`), so a bare path would break under a subdirectory.
+  root.style.setProperty(
+    '--vk-menu-cover',
+    `url("${new URL('menu-cover.webp', document.baseURI).href}")`,
+  )
   show(
     panel({
-      class: 'vk-shell',
+      class: 'vk-shell vk-shell--menu',
       children: [
         label(rawText('Valkyrie'), { size: 'large', heading: 1 }),
         label(rawText(`Web port · ${__VALKYRIE_VERSION__}`), { class: 'vk-shell__version' }),
