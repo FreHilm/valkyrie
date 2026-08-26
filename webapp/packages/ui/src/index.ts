@@ -121,6 +121,13 @@ export type {
   PlayStrings,
   PlayableSession,
 } from './screens/play.js'
+export { startingItemsScreen } from './screens/startingItems.js'
+export type {
+  StartingItemView,
+  StartingItemsOptions,
+  StartingItemsScreen,
+  StartingItemsStrings,
+} from './screens/startingItems.js'
 export { contentSelect } from './screens/contentSelect.js'
 export type {
   ContentSelect,

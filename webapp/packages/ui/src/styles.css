@@ -285,6 +285,45 @@ body {
   opacity: 0.92;
 }
 
+/* ---- starting items ---- */
+.vk-starting {
+  max-width: calc(var(--u) * 32);
+}
+.vk-starting__hint {
+  color: var(--vk-text-soft);
+}
+.vk-starting__groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--vk-gap);
+}
+.vk-starting__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 6), 1fr));
+  gap: calc(var(--u) * 0.4);
+}
+.vk-starting__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--u) * 0.15);
+  text-align: center;
+}
+/* Card art is portrait and full-bleed in the source; a fixed height keeps a
+   row of them even whatever each one's proportions are. */
+.vk-starting__art {
+  width: 100%;
+  height: calc(var(--u) * 7);
+  object-fit: contain;
+  border-radius: var(--vk-radius);
+}
+.vk-starting__name {
+  font-size: var(--vk-text-small);
+}
+
 /* ---- content selection ---- */
 .vk-content-select {
   max-width: calc(var(--u) * 30);

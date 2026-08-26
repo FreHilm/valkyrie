@@ -10,7 +10,7 @@
 
 import { loadContent, loadQuest, textureResolver } from '@valkyrie/platform'
 import type { FileSystem, StoragePaths } from '@valkyrie/platform'
-import type { AudioRequest, CameraCommand } from '@valkyrie/core'
+import type { AudioRequest, CameraCommand, Quest } from '@valkyrie/core'
 import { bundleQuest, QuestSession } from '@valkyrie/core'
 import type { ContentData, QuestComponent, TraitedMonster } from '@valkyrie/core'
 
@@ -131,6 +131,8 @@ export interface StartedQuest {
   gameType: 'MoM' | 'D2E'
   /** The tile scale in force, for sizes given as "Original". */
   pixelsPerSquare: number
+  /** The `[Quest]` section, which says how many investigators it takes. */
+  quest: Quest
 }
 
 /**
@@ -222,5 +224,6 @@ export async function startQuest(
     components: quest.components,
     gameType,
     pixelsPerSquare: content.context.tilePixelPerSquare,
+    quest: quest.quest,
   }
 }
