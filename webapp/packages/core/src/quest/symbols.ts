@@ -54,6 +54,29 @@ export function characterMap(
  * *unchanged from wherever it got to*. Reproduced: a scenario with a broken
  * clause shows partially-substituted text rather than nothing.
  */
+/**
+ * The reverse of {@link characterMap}: which marker a glyph came from.
+ *
+ * `outputSymbolReplace` runs long before anything is drawn, so by render time
+ * a symbol is an unlabelled private-use codepoint. A renderer that wants to
+ * show an icon — or, without the game font, the name of one — has to be able
+ * to ask what it was.
+ *
+ * Built per call rather than cached: the tables are small, and a shared map
+ * would be another piece of mutable module state to reason about.
+ */
+export function symbolNames(gameType: string): Map<string, string> {
+  const names = new Map<string, string>()
+  const map = characterMap(gameType, true, true)
+  if (map === null) return names
+  for (const [marker, glyph] of map) {
+    // First writer wins: two markers share a glyph in D2E, and the earlier is
+    // the one the table lists first.
+    if (glyph.length > 0 && !names.has(glyph)) names.set(glyph, marker.slice(1, -1))
+  }
+  return names
+}
+
 export function outputSymbolReplace(input: string, context: SymbolContext): string {
   let output = input
 

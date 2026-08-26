@@ -217,6 +217,13 @@ export type {
   TranslatableKey,
 } from './quest/ActivationInstance.js'
 
-export { outputSymbolReplace, inputSymbolReplace, characterMap } from './quest/symbols.js'
+export {
+  outputSymbolReplace,
+  inputSymbolReplace,
+  characterMap,
+  symbolNames,
+} from './quest/symbols.js'
+export { needsRichText, parseRichText } from './quest/richText.js'
+export type { RichSpan, RichStyle } from './quest/richText.js'
 export type { SymbolContext } from './quest/symbols.js'
 export { CHARS_MAP, CHAR_PACKS_MAP } from './quest/characterMap.js'
