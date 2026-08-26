@@ -10,7 +10,7 @@
 
 import { loadContent, loadQuest, textureResolver } from '@valkyrie/platform'
 import type { FileSystem, StoragePaths } from '@valkyrie/platform'
-import type { CameraCommand } from '@valkyrie/core'
+import type { AudioRequest, CameraCommand } from '@valkyrie/core'
 import { bundleQuest, QuestSession } from '@valkyrie/core'
 import type { ContentData, QuestComponent, TraitedMonster } from '@valkyrie/core'
 
@@ -155,6 +155,8 @@ export async function startQuest(
     questRoot?: string
     /** Where an event asks the camera to look. */
     camera?: (command: CameraCommand) => void
+    /** A sound the quest asked for. */
+    playAudio?: (request: AudioRequest) => void
     /** Pack ids the player owns. Everything found loads when this is absent. */
     selectedPacks?: Iterable<string>
     /** The pack that loads whatever the selection says. */
@@ -208,6 +210,7 @@ export async function startQuest(
     gameType,
     localization: content.context.localization,
     loadedPacks: content.loaded,
+    ...(options.playAudio === undefined ? {} : { playAudio: options.playAudio }),
     isQuestTransition: (name) => nested.has(normaliseQuestPath(name)),
     ...(options.camera === undefined ? {} : { camera: options.camera }),
   })

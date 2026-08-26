@@ -50,11 +50,13 @@ import {
 import type {
   ActivationView,
   AttackView,
+  AudioRequest,
   CameraCommand,
   EventsView,
   MonsterInstance,
 } from '@valkyrie/core'
 import {
+  AudioEngine,
   autoSaveConfig,
   canPickDirectory,
   canvasTextureEncoder,
@@ -71,8 +73,14 @@ import {
   PickedDirectorySource,
   StoragePaths,
   TextureCache,
+  volumeFromConfig,
 } from '@valkyrie/platform'
-import type { Crop, PickedDirectory, StorageManagerLike } from '@valkyrie/platform'
+import type {
+  AudioContextLike,
+  Crop,
+  PickedDirectory,
+  StorageManagerLike,
+} from '@valkyrie/platform'
 import { acquireQuest } from './acquire.js'
 import { devManifest, loadFromDevServer } from './devLoad.js'
 import { clearStage, lastStage, stage } from './trace.js'
@@ -80,6 +88,7 @@ import { browsableQuests, byRecency, fetchQuestIndex, packageUrl } from './quest
 import { libraryPaths, normaliseQuestPath, startQuest, surveyLibrary } from './library.js'
 import { monsterProfile, questArt, questUiElements, tileImages } from './questArt.js'
 import { monsterDialogView } from './monsterView.js'
+import { defaultQuestMusic, questAudio } from './questAudio.js'
 import { formatBytes, storageReport } from './storage.js'
 import { persistenceMessage, requestPersistence } from './persistence.js'
 import { watchForUpdate } from './serviceWorker.js'
@@ -871,9 +880,27 @@ async function play(
   )
   const config = await loadConfig(fs, storage)
 
+  // Built before the quest starts, because a scenario asks for its opening
+  // music from its very first event.
+  const audio = new AudioEngine(new AudioContext() as unknown as AudioContextLike, fs, {
+    onError: (file: string, error: unknown) => {
+      // A sound that will not decode is not worth stopping a quest for; 98 of
+      // this install's audio files do not survive the import.
+      console.warn(`audio: ${file}`, error)
+    },
+  })
+  audio.musicVolume = volumeFromConfig(config.get('UserConfig', 'music'))
+  audio.effectVolume = volumeFromConfig(config.get('UserConfig', 'effects'))
+  let sound: ((request: AudioRequest) => void) | null = null
+
   const { session, resolveTexture, content, components, gameType, pixelsPerSquare } =
     await startQuest(fs, paths, questPath, {
       questRoot,
+      // Resolution needs the content this call is loading, so the handler is
+      // filled in below and this only forwards to it.
+      playAudio: (request) => {
+        sound?.(request)
+      },
       selectedPacks: config.getPacks('MoM'),
       basePackId: BASE_PACK_ID,
       camera: (command) => {
@@ -1030,6 +1057,19 @@ async function play(
     },
   })
 
+  sound = questAudio({ engine: audio, content, resolveFile: resolveTexture })
+
+  // A browser will not start an audio context without a gesture, and the
+  // quest has already asked for its music by now. `unlock` releases what was
+  // held, so the first click anywhere starts it.
+  const unlockAudio = (): void => {
+    void audio.unlock()
+  }
+  addEventListener('pointerdown', unlockAudio, { once: true })
+  addEventListener('keydown', unlockAudio, { once: true })
+
+  void audio.playDefaultQuestMusic(defaultQuestMusic(content, resolveTexture))
+
   // Everything the quest asked for while it was starting, now that there is
   // something to ask. From here the session aims the camera directly.
   for (const command of pendingCamera) screen.camera(command)
@@ -1044,6 +1084,9 @@ async function play(
     // with it — otherwise the menu reports a failure that never happened.
     clearStage()
     left = true
+    removeEventListener('pointerdown', unlockAudio)
+    removeEventListener('keydown', unlockAudio)
+    void audio.dispose()
     screen.destroy()
     textures.clear()
     for (const url of urls.values()) if (url !== null) URL.revokeObjectURL(url)
