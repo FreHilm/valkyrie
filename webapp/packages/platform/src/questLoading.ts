@@ -12,6 +12,8 @@
 import {
   ContentData,
   ContentLoader,
+  packsToLoad,
+  parseContentPack,
   defaultLocalization,
   DictionaryI18n,
   loadQuestSections,
@@ -20,7 +22,7 @@ import {
   TILE_PIXELS_PER_SQUARE,
   WEB_TEXTURE_EXTENSIONS,
 } from '@valkyrie/core'
-import type { ContentContext, Localization, QuestComponent } from '@valkyrie/core'
+import type { ContentContext, ContentPack, Localization, QuestComponent } from '@valkyrie/core'
 import type { FileSystem } from './filesystem.js'
 import { combine } from './path.js'
 
@@ -32,6 +34,10 @@ export interface LoadedContent {
   context: ContentContext
   /** Pack directories that were read, for reporting. */
   packs: string[]
+  /** Every pack found, whether or not it was loaded. */
+  available: { id: string; name: string; type: string; clone: readonly string[] }[]
+  /** The ids actually loaded, which is what a scenario tests for. */
+  loaded: string[]
 }
 
 export interface ContentOptions {
@@ -41,6 +47,17 @@ export interface ContentOptions {
   importPath: string
   gameType: 'MoM' | 'D2E'
   localization?: Localization
+  /**
+   * Pack ids the player owns, from the `<GameType>Packs` config section. The
+   * base pack loads regardless; anything not named here stays off, because a
+   * scenario tests `#<packId>` to decide what it may ask the player to place.
+   *
+   * Left out, everything found is loaded — which is what the tools and the
+   * differential harnesses want, and never what a player wants.
+   */
+  selected?: Iterable<string>
+  /** `GameType.BaseContentPackId()`. Loaded whatever the selection says. */
+  basePackId?: string
   /**
    * Directory holding Valkyrie's own `Localization*.txt`, which become the
    * `val` dictionary. `Game.cs:285` reads it from `<content>/../text`.
@@ -93,8 +110,40 @@ export async function loadContent(fs: FileSystem, options: ContentOptions): Prom
     )
   }
 
-  const packs = await findPacks(fs, options.root)
-  for (const packDir of packs) {
+  const found = await findPacks(fs, options.root)
+
+  // Read every pack's identity first: the selection names ids, the packs are
+  // directories, and a pack can pull in others by id.
+  const identified: { dir: string; pack: ContentPack }[] = []
+  for (const dir of found) {
+    const pack = parseContentPack(readFromString(await fs.readText(combine(dir, PACK_INI))), {
+      path: dir,
+      importPath: options.importPath,
+    })
+    if (pack === null) continue
+    identified.push({ dir, pack })
+    // Every pack found is registered, not just the loaded ones — `ContentData`
+    // scans the whole directory in the C#, and `GetContentName` has to be able
+    // to name a pack the player has not selected.
+    content.addPack(pack)
+  }
+
+  const wanted =
+    options.selected === undefined
+      ? null
+      : packsToLoad(
+          identified.map(({ pack }) => pack),
+          options.selected,
+          options.basePackId ?? '',
+        )
+
+  const packs: string[] = []
+  const loaded: string[] = []
+  for (const { dir, pack } of identified) {
+    if (wanted !== null && !wanted.has(pack.id)) continue
+    packs.push(dir)
+    loaded.push(pack.id)
+    const packDir = dir
     const manifest = await packManifest(fs, packDir)
     // Before the inis, not after: a `{dict:KEY}` value resolves against
     // whatever is registered as it is parsed. `ContentLoader.cs:95`.
@@ -108,7 +157,18 @@ export async function loadContent(fs: FileSystem, options: ContentOptions): Prom
     }
   }
 
-  return { content, context, packs }
+  return {
+    content,
+    context,
+    packs,
+    available: identified.map(({ pack }) => ({
+      id: pack.id,
+      name: pack.name,
+      type: pack.type,
+      clone: pack.clone,
+    })),
+    loaded,
+  }
 }
 
 /** Every directory under `root` holding a `content_pack.ini`, recursively. */
