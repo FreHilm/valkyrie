@@ -376,6 +376,13 @@ function channel(pixel: number, mask: number, info: { shift: number; scale: numb
  * Formats are Unity's `TextureFormat` values. The five in this list are what a
  * real Mansions of Madness install contains; anything else throws with the
  * value, so an unexpected format is reported rather than silently mangled.
+ *
+ * The rows come back flipped, because Unity stores a texture from the bottom
+ * up: its origin is the bottom-left corner, and `LoadRawTextureData` fills
+ * from there. The C# never notices — it hands the same bytes straight back to
+ * Unity, which reads them under the same convention — but a browser draws an
+ * image from the top down, so leaving them alone stands every picture in the
+ * game on its head.
  */
 export function decodeUnityTexture(
   format: number,
@@ -385,6 +392,16 @@ export function decodeUnityTexture(
 ): Uint8Array {
   if (width === 0 || height === 0) return new Uint8Array(0)
 
+  return flipRows(decodeUnityRows(format, width, height, data), width, height)
+}
+
+/** The pixels as Unity stores them, bottom row first. */
+function decodeUnityRows(
+  format: number,
+  width: number,
+  height: number,
+  data: Uint8Array,
+): Uint8Array {
   switch (format) {
     case TextureFormat.DXT1:
       return decodeDxt1(data, width, height)
@@ -403,6 +420,27 @@ export function decodeUnityTexture(
     default:
       throw new DdsError(`Unsupported Unity texture format: ${format}`)
   }
+}
+
+/**
+ * Reverses the row order of an RGBA buffer, in place where it can.
+ *
+ * Whole rows are swapped rather than pixels: the row is the unit that moves,
+ * and a block-compressed image has already been expanded by the time it gets
+ * here, so nothing below this needs to know which format it came from.
+ */
+export function flipRows(rgba: Uint8Array, width: number, height: number): Uint8Array {
+  const stride = width * 4
+  if (stride === 0 || height < 2) return rgba
+  const row = new Uint8Array(stride)
+  for (let top = 0, bottom = height - 1; top < bottom; top++, bottom--) {
+    const a = top * stride
+    const b = bottom * stride
+    row.set(rgba.subarray(a, a + stride))
+    rgba.copyWithin(a, b, b + stride)
+    rgba.set(row, b)
+  }
+  return rgba
 }
 
 /**

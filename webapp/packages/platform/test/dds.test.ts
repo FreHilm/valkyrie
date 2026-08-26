@@ -17,6 +17,7 @@ import {
   decodeDxt1,
   decodeDxt5,
   decodeUnityTexture,
+  flipRows,
 } from '../src/dds.js'
 
 /** Builds a DDS file around a payload. */
@@ -317,7 +318,53 @@ describe('decodeUnityTexture', () => {
     const rgba = decodeUnityTexture(TextureFormat.RGBA32, 4, 4, Uint8Array.from([1, 2, 3, 4]))
 
     expect(rgba).toHaveLength(4 * 4 * 4)
-    expect([...rgba.slice(0, 4)]).toEqual([1, 2, 3, 4])
-    expect([...rgba.slice(4, 8)]).toEqual([0, 0, 0, 0])
+    // The one pixel supplied is Unity's first, which is the bottom-left of the
+    // image — so after the flip it is the first pixel of the last row.
+    const lastRow = 3 * 4 * 4
+    expect([...rgba.slice(lastRow, lastRow + 4)]).toEqual([1, 2, 3, 4])
+    expect([...rgba.slice(0, 4)]).toEqual([0, 0, 0, 0])
+  })
+
+  it('turns Unity’s bottom-up rows the right way up', () => {
+    // Unity's texture origin is the bottom-left corner, so the first row of
+    // the payload is the bottom of the picture. A browser draws from the top,
+    // and without this every image in the game is upside down.
+    const rows = Uint8Array.from([...[1, 1, 1, 255, 2, 2, 2, 255], ...[3, 3, 3, 255, 4, 4, 4, 255]])
+
+    const rgba = decodeUnityTexture(TextureFormat.RGBA32, 2, 2, rows)
+
+    expect([...rgba.slice(0, 8)]).toEqual([3, 3, 3, 255, 4, 4, 4, 255])
+    expect([...rgba.slice(8, 16)]).toEqual([1, 1, 1, 255, 2, 2, 2, 255])
+  })
+
+  it('leaves a single row alone', () => {
+    const rgba = decodeUnityTexture(
+      TextureFormat.RGBA32,
+      2,
+      1,
+      Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]),
+    )
+
+    expect([...rgba]).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+  })
+})
+
+describe('flipRows', () => {
+  it('reverses the row order', () => {
+    const rgba = Uint8Array.from([...[1, 1, 1, 1], ...[2, 2, 2, 2], ...[3, 3, 3, 3]])
+
+    expect([...flipRows(rgba, 1, 3)]).toEqual([3, 3, 3, 3, 2, 2, 2, 2, 1, 1, 1, 1])
+  })
+
+  it('is its own inverse', () => {
+    const original = Uint8Array.from([...[1, 2, 3, 4], ...[5, 6, 7, 8], ...[9, 10, 11, 12]])
+    const once = flipRows(Uint8Array.from(original), 1, 3)
+
+    expect([...flipRows(once, 1, 3)]).toEqual([...original])
+  })
+
+  it('has nothing to do for an empty or single-row image', () => {
+    expect([...flipRows(new Uint8Array(0), 0, 0)]).toEqual([])
+    expect([...flipRows(Uint8Array.from([1, 2, 3, 4]), 1, 1)]).toEqual([1, 2, 3, 4])
   })
 })

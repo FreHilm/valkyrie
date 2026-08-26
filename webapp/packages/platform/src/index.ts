@@ -105,6 +105,7 @@ export {
   decodeDxt1,
   decodeDxt5,
   decodeUnityTexture,
+  flipRows,
   DdsError,
   TextureFormat,
 } from './dds.js'

@@ -5,7 +5,13 @@
  * install, extract, decode, encode, write. The output goes to a cache outside
  * the repository — it is licensed content and must never be committed.
  *
- *   node tools/ffg/run-import.mjs "<path to the .app or _Data dir>" [game]
+ *   node tools/ffg/run-import.mjs "<install>" [game] "<download cache>"
+ *
+ * The download cache is not optional in practice. Current builds keep almost
+ * nothing in the install — MoM 2.1.6 fetches its art, audio and text on first
+ * run — so importing the install alone yields a handful of textures and looks
+ * like a working import that produced nothing. On macOS it is
+ * ~/Library/Caches/com.fantasyflightgames.mom.
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -19,7 +25,8 @@ import { importFfgApp, isLossyFormat } from '../../packages/platform/src/ffgImpo
 const input = process.argv[2]
 const game = process.argv[3] ?? 'MoM'
 if (input === undefined) {
-  console.error('usage: run-import.mjs <install path> [MoM|D2E]')
+  console.error('usage: run-import.mjs <install path> [MoM|D2E] [download cache]')
+  console.error('  the download cache holds nearly everything; see the header')
   process.exit(1)
 }
 

@@ -13,7 +13,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 
-import { decodeDds, decodeUnityTexture } from '../../../packages/platform/src/dds.ts'
+import { decodeDds, decodeUnityTexture, flipRows } from '../../../packages/platform/src/dds.ts'
 import {
   ClassID,
   readObject,
@@ -126,7 +126,12 @@ for (const file of readdirSync(DATA).filter((f) => f.endsWith('.assets'))) {
       asset.streamData !== null ? resolveStreamData(asset.streamData, resources) : asset.data
 
     const direct = decodeUnityTexture(asset.textureFormat, asset.width, asset.height, payload)
+    // The .dds the C# exported holds Unity's own rows, bottom up, and
+    // `decodeDds` reads them as the format specifies — top down. Flipping one
+    // is what makes the two paths comparable, and asserting they then agree is
+    // what pins the convention: they differ by exactly a flip, and nothing else.
     const viaDds = decodeDds(new Uint8Array(readFileSync(ddsPath)))
+    viaDds.rgba = flipRows(viaDds.rgba, viaDds.width, viaDds.height)
 
     if (viaDds.width !== asset.width || viaDds.height !== asset.height) {
       skipped++
