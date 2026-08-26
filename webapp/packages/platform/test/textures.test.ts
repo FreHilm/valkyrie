@@ -13,6 +13,9 @@ import { describe, expect, it } from 'vitest'
 import { TextureCache } from '../src/textures.js'
 import type { Crop } from '../src/textures.js'
 
+/** The stand-in sheet is square, so a flipped `y` is easy to read. */
+const SHEET = 1024
+
 /** A stand-in bitmap that records being closed. */
 function bitmap(label: string, width = 1, height = 1) {
   return {
@@ -31,7 +34,7 @@ function bitmap(label: string, width = 1, height = 1) {
 
 function cache(
   files: Record<string, string>,
-  options: { limit?: number; failDecode?: boolean } = {},
+  options: { limit?: number; failDecode?: boolean; sheet?: number } = {},
 ) {
   const reads: string[] = []
   const decodes: { size: number; crop?: Crop }[] = []
@@ -41,10 +44,18 @@ function cache(
       const content = files[path]
       return content === undefined ? null : new TextEncoder().encode(content)
     },
-    createBitmap: async (blob, crop) => {
-      decodes.push(crop === undefined ? { size: blob.size } : { size: blob.size, crop })
+    createBitmap: async (source, crop) => {
+      // A crop is cut from the decoded sheet, so the source is a bitmap by
+      // then rather than the bytes.
+      const size = source instanceof Blob ? source.size : source.width
+      decodes.push(crop === undefined ? { size } : { size, crop })
       if (options.failDecode === true) throw new Error('undecodable')
-      return bitmap(`${blob.size}${crop === undefined ? '' : `#${crop.x}`}`)
+      const label = `${size}${crop === undefined ? '' : `#${crop.x}`}`
+      if (crop !== undefined) return bitmap(label, crop.width, crop.height)
+      // Whole sheets are 1x1 unless a test needs a measurable one, so the
+      // byte-limit tests stay easy to read.
+      const side = options.sheet ?? 1
+      return bitmap(label, side, side)
     },
     ...(options.limit === undefined ? {} : { limit: options.limit }),
   })
@@ -81,19 +92,42 @@ describe('TextureCache', () => {
   it('keeps crops of one sheet apart', async () => {
     // Tokens are rectangles within a shared sheet, so the crop is part of the
     // identity — caching by path alone would give every token the same art.
-    const { instance, decodes } = cache({ 'img/sheet': 'bytes' })
+    const { instance, decodes } = cache({ 'img/sheet': 'bytes' }, { sheet: SHEET })
     const first = await instance.load('img/sheet', { x: 0, y: 0, width: 64, height: 64 })
     const second = await instance.load('img/sheet', { x: 64, y: 0, width: 64, height: 64 })
 
-    expect(decodes).toHaveLength(2)
+    // The sheet itself, then one cut per token.
+    expect(decodes).toHaveLength(3)
     expect(first).not.toBe(second)
   })
 
-  it('passes the crop through to the decoder', async () => {
-    const { instance, decodes } = cache({ 'img/sheet': 'bytes' })
-    await instance.load('img/sheet', { x: 12, y: 34, width: 56, height: 78 })
+  it('decodes a shared sheet once, however many tokens are cut from it', async () => {
+    const { instance, reads } = cache({ 'img/sheet': 'bytes' }, { sheet: SHEET })
+    await instance.load('img/sheet', { x: 0, y: 0, width: 64, height: 64 })
+    await instance.load('img/sheet', { x: 64, y: 0, width: 64, height: 64 })
 
-    expect(decodes[0]?.crop).toEqual({ x: 12, y: 34, width: 56, height: 78 })
+    expect(reads).toEqual(['img/sheet'])
+  })
+
+  it('measures the crop from the bottom, as content declares it', async () => {
+    // `ContentData.FileToTexture` cuts with `Texture2D.GetPixels`, whose
+    // origin is the bottom-left corner. Read from the top instead, a token
+    // with a non-zero `y` is not misaligned — it is a different token.
+    const { instance, decodes } = cache({ 'img/sheet': 'bytes' }, { sheet: SHEET })
+    await instance.load('img/sheet', { x: 1040, y: 650, width: 130, height: 130 })
+
+    expect(decodes[1]?.crop).toEqual({
+      x: 1040,
+      y: SHEET - 650 - 130,
+      width: 130,
+      height: 130,
+    })
+  })
+
+  it('gives back nothing when the sheet itself is missing', async () => {
+    const { instance } = cache({})
+
+    expect(await instance.load('img/absent', { x: 0, y: 0, width: 8, height: 8 })).toBeNull()
   })
 
   it('returns null for a missing file rather than throwing', async () => {

@@ -11,7 +11,16 @@
  * cached, because a scenario asks for the same tile art on every redraw.
  */
 
-/** A rectangle within a sprite sheet. */
+/**
+ * A rectangle within a sprite sheet, **measured from the bottom left**.
+ *
+ * That is where content declares it: `ContentData.FileToTexture` cuts the
+ * rectangle out with `Texture2D.GetPixels`, whose origin is the bottom-left
+ * corner. A browser measures from the top, so `y` has to be turned over
+ * against the sheet's height before it means anything here — 38 of the
+ * shipped Mansions tokens have a non-zero `y`, and reading it from the wrong
+ * edge picks a different token rather than a misaligned one.
+ */
 export interface Crop {
   x: number
   y: number
@@ -31,7 +40,7 @@ export interface TextureCacheOptions {
    * `createImageBitmap`, injected so the cache can be tested without a
    * browser. The crop arguments are the same ones the platform takes.
    */
-  createBitmap?: (blob: Blob, crop?: Crop) => Promise<Texture>
+  createBitmap?: (source: Blob | Texture, crop?: Crop) => Promise<Texture>
   /**
    * How much decoded image data to keep, in bytes.
    *
@@ -51,9 +60,9 @@ function bytesOf(bitmap: Texture): number {
   return bitmap.width * bitmap.height * 4
 }
 
-async function defaultCreateBitmap(blob: Blob, crop?: Crop): Promise<Texture> {
-  if (crop === undefined) return createImageBitmap(blob)
-  return createImageBitmap(blob, crop.x, crop.y, crop.width, crop.height)
+async function defaultCreateBitmap(source: Blob | Texture, crop?: Crop): Promise<Texture> {
+  if (crop === undefined) return createImageBitmap(source)
+  return createImageBitmap(source, crop.x, crop.y, crop.width, crop.height)
 }
 
 /**
@@ -65,7 +74,7 @@ async function defaultCreateBitmap(blob: Blob, crop?: Crop): Promise<Texture> {
  */
 export class TextureCache {
   private readonly read: TextureReader
-  private readonly createBitmap: (blob: Blob, crop?: Crop) => Promise<Texture>
+  private readonly createBitmap: (source: Blob | Texture, crop?: Crop) => Promise<Texture>
   private readonly limit: number
 
   /** Insertion order is the LRU order; a hit re-inserts. */
@@ -115,6 +124,8 @@ export class TextureCache {
   }
 
   private async decode(path: string, crop: Crop | undefined, key: string): Promise<Texture | null> {
+    if (crop !== undefined) return this.decodeCrop(path, crop, key)
+
     let bytes: Uint8Array | null
     try {
       bytes = await this.read(path)
@@ -131,6 +142,36 @@ export class TextureCache {
       // A copy, because the blob must own its buffer: the caller's array may
       // be a view into a larger one the filesystem reuses.
       bitmap = await this.createBitmap(new Blob([new Uint8Array(bytes)]), crop)
+    } catch {
+      this.missing.add(key)
+      return null
+    }
+
+    this.store(key, bitmap)
+    return bitmap
+  }
+
+  /**
+   * Cuts a rectangle out of a sheet.
+   *
+   * The whole sheet is loaded through `load` rather than decoded here, so the
+   * dozens of tokens sharing one atlas decode it once between them — and so
+   * its height is known, which is what the rectangle has to be measured
+   * against to turn it the right way up.
+   */
+  private async decodeCrop(path: string, crop: Crop, key: string): Promise<Texture | null> {
+    const sheet = await this.load(path)
+    if (sheet === null) {
+      this.missing.add(key)
+      return null
+    }
+
+    let bitmap: Texture
+    try {
+      bitmap = await this.createBitmap(sheet, {
+        ...crop,
+        y: sheet.height - crop.y - crop.height,
+      })
     } catch {
       this.missing.add(key)
       return null
