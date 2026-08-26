@@ -48,7 +48,7 @@ export {
 } from './archive.js'
 export type { ArchiveEntry, ExtractResult, ExtractOptions } from './archive.js'
 
-export { findLocalisedMultimediaFile } from './multimedia.js'
+export { findLocalisedMultimediaFile, questFileResolver } from './multimedia.js'
 export type { LocalisationContext } from './multimedia.js'
 export { extractStream } from './archive.js'
 

@@ -16,7 +16,7 @@ import {
   ContentData,
   ContentLoader,
 } from '@valkyrie/core'
-import { monsterSize, questArt } from '../src/questArt.js'
+import { monsterSize, questArt, questUiElements } from '../src/questArt.js'
 
 function content(ini: string, resolve: (name: string) => string | null): ContentData {
   const context = headlessContext({ resolveTextureFile: resolve, tilePixelPerSquare: 100 })
@@ -187,5 +187,51 @@ pps=64
 
     expect(mom.onGrid).toBe(false)
     expect(d2e.onGrid).toBe(true)
+  })
+})
+
+describe('questUiElements', () => {
+  const ui = (section: string) => components(`[UIThing]\nxposition=0\nyposition=0\n${section}`)
+
+  const build = (
+    section: string,
+    over: Partial<Parameters<typeof questUiElements>[0]> = {},
+  ) =>
+    questUiElements({
+      content: content('', () => null),
+      components: ui(section),
+      onBoard: ['UIThing'],
+      resolveTexture: () => null,
+      resolveQuestFile: () => null,
+      imageUrl: (path) => `url:${path}`,
+      sizeOf: size256,
+      text: (key) => key.translate({ emptyIfNotFound: true }),
+      ...over,
+    })
+
+  it('finds art the author put beside the scenario', () => {
+    // `Quest.cs:2026`. `MoM__ExoticMaterial` names its opening background
+    // `meteorite.jpg` — a file in its own directory, which the content
+    // resolver cannot see. Resolved through content alone the element has no
+    // image, falls through to its text, and draws `UIBG.uitext` in place of
+    // the picture.
+    const [element] = build('image=meteorite.jpg\nsize=1\nvunits=True', {
+      resolveQuestFile: (name) => (name === 'meteorite.jpg' ? '/quests/x/meteorite.jpg' : null),
+    })
+    expect(element?.image).toBe('url:/quests/x/meteorite.jpg')
+  })
+
+  it('still addresses a sheet the game ships through the content resolver', () => {
+    // The other half of the same branch: a name the content knows is not
+    // looked for beside the scenario, and keeps the crop its pack recorded.
+    const [element] = build('image=ImageThing', {
+      content: content(
+        '[ImageThing]\nimage=art/sheet\nx=10\ny=20\nwidth=30\nheight=40\n',
+        (name) => `${name}.webp`,
+      ),
+      resolveTexture: (name) => (name.length > 0 ? `${name}.webp` : null),
+      resolveQuestFile: () => null,
+    })
+    expect(element?.image).toBe('url:/pack/art/sheet.webp')
   })
 })

@@ -39,6 +39,7 @@ import {
 import {
   ActivationInstance,
   attackTypes,
+  DEFAULT_LANGUAGE,
   LogEntry,
   MoMPhase,
   randomAttack,
@@ -71,6 +72,7 @@ import {
   MemoryFileSystem,
   OpfsFileSystem,
   PickedDirectorySource,
+  questFileResolver,
   StoragePaths,
   TextureCache,
   volumeFromConfig,
@@ -910,6 +912,16 @@ async function play(
     })
   stage('play: quest loaded')
 
+  // A scenario's own art is named relative to its directory, and is resolved
+  // while the scene is being built — so the listing is taken once here rather
+  // than probed per frame. `Game.cs:210` reads the languages from the same
+  // config this screen already loaded.
+  const resolveQuestFile = await questFileResolver(fs, questPath, {
+    currentLang: config.get('UserConfig', 'currentLang') || DEFAULT_LANGUAGE,
+    fallbackLang: config.get('UserConfig', 'fallbackLang'),
+    editMode: false,
+  })
+
   const textures = new TextureCache({
     read: async (path) => {
       try {
@@ -1066,7 +1078,11 @@ async function play(
         resolveTexture,
         imageUrl,
         sizeOf: (path) => uiSizes.get(path) ?? sizes.get(path) ?? null,
-        text: (key) => key.translate(),
+        resolveQuestFile,
+        // `Quest.cs:2227` translates a UI element's text with
+        // `emptyIfNotFound`. An image-only element never declares a `uitext`,
+        // and without the flag its key is drawn in place of the picture.
+        text: (key) => key.translate({ emptyIfNotFound: true }),
       }),
     loadTexture: async (path: string, crop?: Crop) => {
       const file = resolveTexture(path) ?? path

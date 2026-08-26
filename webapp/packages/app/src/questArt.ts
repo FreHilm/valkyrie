@@ -248,6 +248,12 @@ export interface QuestUiOptions {
   imageUrl: (path: string, crop?: Crop) => string | null
   /** Pixel size of a decoded image, for the aspect an image element takes. */
   sizeOf: SizeLookup
+  /**
+   * Resolves a file named beside the scenario, localised variants included.
+   * `Quest.cs:2026` reaches for this, not for content, when an image name is
+   * not one the game already ships.
+   */
+  resolveQuestFile: (name: string) => string | null
   /** Resolves the element's `uitext` key. */
   text: (key: StringKey) => string
 }
@@ -261,6 +267,7 @@ export interface QuestUiOptions {
  */
 export function questUiElements(options: QuestUiOptions): QuestUiElement[] {
   const { content, components, resolveTexture, imageUrl, sizeOf, text } = options
+  const { resolveQuestFile } = options
   const built: QuestUiElement[] = []
 
   for (const name of options.onBoard) {
@@ -272,11 +279,15 @@ export function questUiElements(options: QuestUiOptions): QuestUiElement[] {
 
     if (component.imageName.length > 0) {
       const data = content.tryGet(ImageData, component.imageName)
-      const declared = data?.image ?? component.imageName
-      const file = resolveTexture(declared)
+      const known = data !== null && data !== undefined
+      // `Quest.cs:2021`. A name the content knows is a sheet the game ships,
+      // addressed by the absolute path its pack recorded. Anything else is a
+      // file the author put beside the scenario — `meteorite.jpg` — which no
+      // content lookup can find, because it is named relative to the quest.
+      const file = known ? resolveTexture(data.image) : resolveQuestFile(component.imageName)
       if (file !== null) {
         const crop =
-          data !== null && data !== undefined && data.width > 0 && data.height > 0
+          known && data.width > 0 && data.height > 0
             ? { x: data.x, y: data.y, width: data.width, height: data.height }
             : undefined
         image = imageUrl(file, crop)

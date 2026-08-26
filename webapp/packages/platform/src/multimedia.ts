@@ -36,27 +36,73 @@ export async function findLocalisedMultimediaFile(
   source: string,
   context: LocalisationContext,
 ): Promise<string> {
-  const root = combine(source, name)
-  if (context.editMode) return root
+  for (const candidate of localisedCandidates(name, source, context)) {
+    if (await fs.exists(candidate)) return candidate
+  }
+  return combine(source, name)
+}
+
+/**
+ * Every path the C# probes for `name`, in the order it probes them.
+ *
+ * Shared by both resolvers so the order cannot drift between them. The
+ * unlocalised path is not included: it is what the C# returns having found
+ * nothing, whether or not anything is there, so each caller appends it itself.
+ */
+function localisedCandidates(
+  name: string,
+  source: string,
+  context: LocalisationContext,
+): string[] {
+  if (context.editMode) return []
 
   const directory = dirname(name)
   const file = basename(name)
 
-  const candidates = (lang: string): string[] =>
+  const forLanguage = (lang: string): string[] =>
     directory.length === 0
       ? [combine(source, lang, name)]
       : [combine(source, lang, name), combine(source, directory, lang, file)]
 
-  for (const candidate of candidates(context.currentLang)) {
-    if (await fs.exists(candidate)) return candidate
-  }
+  const candidates = forLanguage(context.currentLang)
 
   const fallback = context.fallbackLang
   if (fallback !== null && fallback.length > 0 && fallback !== context.currentLang) {
-    for (const candidate of candidates(fallback)) {
-      if (await fs.exists(candidate)) return candidate
+    candidates.push(...forLanguage(fallback))
+  }
+
+  return candidates
+}
+
+/**
+ * A synchronous {@link findLocalisedMultimediaFile} over a directory listing.
+ *
+ * A scenario's screen-space art is resolved while the scene is being built,
+ * on every frame that changes it, which cannot await a filesystem. Listing the
+ * scenario once up front is what makes an answer possible there at all — the
+ * same trade `textureResolver` makes for content.
+ *
+ * Unlike the C#, this returns `null` rather than a composed path when nothing
+ * exists: a caller that cannot open the file has nothing to do with a name.
+ */
+export async function questFileResolver(
+  fs: FileSystem,
+  source: string,
+  context: LocalisationContext,
+): Promise<(name: string) => string | null> {
+  const files = new Set<string>()
+  if (await fs.exists(source)) {
+    for (const entry of await fs.list(source, { recursive: true })) {
+      if (entry.kind === 'file') files.add(entry.path)
     }
   }
 
-  return root
+  return (name: string) => {
+    if (name.length === 0) return null
+    for (const candidate of localisedCandidates(name, source, context)) {
+      if (files.has(candidate)) return candidate
+    }
+    const root = combine(source, name)
+    return files.has(root) ? root : null
+  }
 }

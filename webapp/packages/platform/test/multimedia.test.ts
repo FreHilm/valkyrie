@@ -8,7 +8,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { findLocalisedMultimediaFile } from '../src/multimedia.js'
+import { findLocalisedMultimediaFile, questFileResolver } from '../src/multimedia.js'
 import type { LocalisationContext } from '../src/multimedia.js'
 import { MemoryFileSystem } from '../src/filesystem.js'
 import { combine } from '../src/path.js'
@@ -142,5 +142,65 @@ describe('resolution order', () => {
     expect(await call('images\\BgTile.png', 'German', 'English')).toBe(
       `${SOURCE}/German/images/BgTile.png`,
     )
+  })
+})
+
+describe('questFileResolver', () => {
+  it('finds a file the author put beside the scenario', async () => {
+    // `MoM__ExoticMaterial` names its background `meteorite.jpg`, relative to
+    // its own directory. No content lookup can find that — the packs address
+    // their art by the absolute path they recorded — so an element resolved
+    // through content alone draws nothing at all.
+    await createFile('meteorite.jpg')
+    const resolve = await questFileResolver(fs, SOURCE, {
+      currentLang: 'English',
+      fallbackLang: '',
+      editMode: false,
+    })
+    expect(resolve('meteorite.jpg')).toBe(combine(SOURCE, 'meteorite.jpg'))
+  })
+
+  it('prefers the localised variant, in the same order as the C#', async () => {
+    await createFile('map.png')
+    await createFile('German/map.png')
+    const resolve = await questFileResolver(fs, SOURCE, {
+      currentLang: 'German',
+      fallbackLang: 'English',
+      editMode: false,
+    })
+    expect(resolve('map.png')).toBe(combine(SOURCE, 'German/map.png'))
+  })
+
+  it('falls back to the fallback language before the unlocalised file', async () => {
+    await createFile('map.png')
+    await createFile('English/map.png')
+    const resolve = await questFileResolver(fs, SOURCE, {
+      currentLang: 'German',
+      fallbackLang: 'English',
+      editMode: false,
+    })
+    expect(resolve('map.png')).toBe(combine(SOURCE, 'English/map.png'))
+  })
+
+  it('finds a language folder inside the asset’s own subfolder', async () => {
+    await createFile('image/German/map.png')
+    const resolve = await questFileResolver(fs, SOURCE, {
+      currentLang: 'German',
+      fallbackLang: '',
+      editMode: false,
+    })
+    expect(resolve('image/map.png')).toBe(combine(SOURCE, 'image/German/map.png'))
+  })
+
+  it('reports nothing for a file that is not there', async () => {
+    // Where the C# composes a path regardless, so its caller can name the
+    // missing file. Here the caller only ever wants to open it.
+    const resolve = await questFileResolver(fs, SOURCE, {
+      currentLang: 'English',
+      fallbackLang: '',
+      editMode: false,
+    })
+    expect(resolve('missing.jpg')).toBeNull()
+    expect(resolve('')).toBeNull()
   })
 })
