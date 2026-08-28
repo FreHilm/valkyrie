@@ -193,10 +193,7 @@ pps=64
 describe('questUiElements', () => {
   const ui = (section: string) => components(`[UIThing]\nxposition=0\nyposition=0\n${section}`)
 
-  const build = (
-    section: string,
-    over: Partial<Parameters<typeof questUiElements>[0]> = {},
-  ) =>
+  const build = (section: string, over: Partial<Parameters<typeof questUiElements>[0]> = {}) =>
     questUiElements({
       content: content('', () => null),
       components: ui(section),

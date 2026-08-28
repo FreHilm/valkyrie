@@ -555,9 +555,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
     // `if (!firstTileDisplayed) return`: the bar waits for the board to have
     // something on it, so the opening cutscene is not framed by chrome. The
     // port reads that off the board rather than keeping the flag.
-    const onBoard = session
-      .runtime.boardItems()
-      .some((item) => item.component.type === 'Tile')
+    const onBoard = session.runtime.boardItems().some((item) => item.component.type === 'Tile')
     if (!onBoard) return
 
     const dialogUp = kind !== 'board'

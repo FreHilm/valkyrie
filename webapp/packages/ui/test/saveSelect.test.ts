@@ -107,9 +107,7 @@ describe('saveSelect', () => {
 
   it('goes back', () => {
     const { screen, onBack } = make('load')
-    ;[...screen.element.querySelectorAll('button')]
-      .find((b) => b.textContent === 'Back')
-      ?.click()
+    ;[...screen.element.querySelectorAll('button')].find((b) => b.textContent === 'Back')?.click()
 
     expect(onBack).toHaveBeenCalled()
   })

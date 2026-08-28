@@ -140,9 +140,7 @@ function drawQuota(into: HTMLElement, quota: EventQuota, action: EventButton | u
         disabled: value <= 0,
       }),
     )
-    spinner.append(
-      el('output', { class: 'vk-event__quota-value', text: String(value) }),
-    )
+    spinner.append(el('output', { class: 'vk-event__quota-value', text: String(value) }))
     spinner.append(
       button(rawText('+'), {
         onPress: () => {

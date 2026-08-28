@@ -541,9 +541,7 @@ export class QuestSession {
     // a scenario chains between its pages stays out of the log.
     const current = this.events.current
     if (current !== null) {
-      this.runtime.log.add(
-        new LogEntry(this.eventText(current.sectionName).replace(/\n/g, '\\n')),
-      )
+      this.runtime.log.add(new LogEntry(this.eventText(current.sectionName).replace(/\n/g, '\\n')))
     }
     this.events.endEvent(index)
     this.settle()
@@ -813,7 +811,10 @@ export class QuestSession {
 
     // Last, because it decides what is on screen: the events the player had
     // not answered yet, and the one they were looking at.
-    const queued = data.get('EventManager', 'queue').split(' ').filter((n) => n.length > 0)
+    const queued = data
+      .get('EventManager', 'queue')
+      .split(' ')
+      .filter((n) => n.length > 0)
     const currentName = data.get('EventManager', 'currentevent')
     const current = currentName.length === 0 ? null : this.events.definition(currentName)
     this.events.restoreQueue(queued, current)

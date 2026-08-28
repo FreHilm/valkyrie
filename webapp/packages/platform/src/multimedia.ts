@@ -49,11 +49,7 @@ export async function findLocalisedMultimediaFile(
  * unlocalised path is not included: it is what the C# returns having found
  * nothing, whether or not anything is there, so each caller appends it itself.
  */
-function localisedCandidates(
-  name: string,
-  source: string,
-  context: LocalisationContext,
-): string[] {
+function localisedCandidates(name: string, source: string, context: LocalisationContext): string[] {
   if (context.editMode) return []
 
   const directory = dirname(name)

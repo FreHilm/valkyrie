@@ -61,7 +61,17 @@ function start() {
   return { session, screen }
 }
 
-const buttons = (root: HTMLElement): HTMLButtonElement[] => [...root.querySelectorAll('button')]
+/**
+ * The buttons a dialog or the controls offer — not the board's own.
+ *
+ * The board mirrors its pieces into an off-screen list of real buttons so a
+ * keyboard can reach a door. Anything asking about dialogs has to say it means
+ * those, or it counts the board as well.
+ */
+const buttons = (root: HTMLElement): HTMLButtonElement[] =>
+  [...root.querySelectorAll<HTMLButtonElement>('button')].filter(
+    (b) => b.closest('.vk-board__pieces') === null,
+  )
 const press = (root: HTMLElement, name: string): void => {
   const target = buttons(root).find((b) => b.textContent?.includes(name))
   if (target === undefined) throw new Error(`no button matching ${name}`)

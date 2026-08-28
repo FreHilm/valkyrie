@@ -923,23 +923,23 @@ async function play(
     quest,
     loadedPacks,
   } = await startQuest(fs, paths, questPath, {
-      questRoot,
-      // Resolution needs the content this call is loading, so the handler is
-      // filled in below and this only forwards to it.
-      playAudio: (request) => {
-        sound?.(request)
-      },
-      selectedPacks: config.getPacks('MoM'),
-      basePackId: BASE_PACK_ID,
-      camera: (command) => {
-        aim(command)
-      },
-      // `SaveManager.Save(0)`, which the round controller calls at the start
-      // of every round and once when the quest begins.
-      save: () => {
-        autosave()
-      },
-    })
+    questRoot,
+    // Resolution needs the content this call is loading, so the handler is
+    // filled in below and this only forwards to it.
+    playAudio: (request) => {
+      sound?.(request)
+    },
+    selectedPacks: config.getPacks('MoM'),
+    basePackId: BASE_PACK_ID,
+    camera: (command) => {
+      aim(command)
+    },
+    // `SaveManager.Save(0)`, which the round controller calls at the start
+    // of every round and once when the quest begins.
+    save: () => {
+      autosave()
+    },
+  })
   stage('play: quest loaded')
 
   // `Quest.start_time`, which the C# keeps on the quest so a save can carry the

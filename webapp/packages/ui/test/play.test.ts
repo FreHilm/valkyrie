@@ -132,10 +132,7 @@ describe('playScreen', () => {
       const { screen } = make(EVENT)
 
       expect(screen.element.textContent).toContain('The hallway is dark.')
-      expect(chrome(screen.element).map((b) => b.textContent)).toEqual([
-        'Open the door',
-        'Locked',
-      ])
+      expect(chrome(screen.element).map((b) => b.textContent)).toEqual(['Open the door', 'Locked'])
     })
 
     it('hides the turn controls, so the player answers first', () => {
@@ -394,9 +391,7 @@ describe('playScreen phase menus', () => {
   }
 
   const bar = (screen: { element: HTMLElement }): string[] =>
-    [...screen.element.querySelectorAll('.vk-play__menus button')].map(
-      (b) => b.textContent ?? '',
-    )
+    [...screen.element.querySelectorAll('.vk-play__menus button')].map((b) => b.textContent ?? '')
 
   it('puts the three menus on the bar', () => {
     const { screen } = withMenus({ kind: 'board' })
@@ -422,7 +417,7 @@ describe('playScreen phase menus', () => {
     expect(menu?.textContent).toContain('A rusted key')
 
     press(menu as HTMLElement, 'A rusted key')
-    expect((built.items.onInspect).mock.calls).toEqual([['QItemKey']])
+    expect(built.items.onInspect.mock.calls).toEqual([['QItemKey']])
     // `Inspect` closes the window first; the event it queues is a dialog, and
     // the two would otherwise be on screen together.
     expect(screen.element.querySelector('.vk-play__menu')?.textContent).toBe('')
@@ -435,7 +430,9 @@ describe('playScreen phase menus', () => {
 
     press(screen.element, 'Log')
     expect(screen.element.querySelector('.vk-play__menu')?.textContent).toContain('You enter.')
-    expect(screen.element.querySelector('.vk-play__overlay')?.textContent).toContain('A door opens.')
+    expect(screen.element.querySelector('.vk-play__overlay')?.textContent).toContain(
+      'A door opens.',
+    )
   })
 
   it('will not open the items or the set window while a dialog is up', () => {
@@ -458,7 +455,7 @@ describe('playScreen phase menus', () => {
 
     const menu = screen.element.querySelector('.vk-play__menu') as HTMLElement
     press(menu, 'Set Fire')
-    expect((built.set.onFire).mock.calls).toEqual([[true]])
+    expect(built.set.onFire.mock.calls).toEqual([[true]])
   })
 
   it('will not take back an elimination the quest has already played out', () => {
@@ -662,9 +659,7 @@ describe('playScreen game menu', () => {
     // `MenuButton` puts it there, clear of the phase bar and monster strip.
     const { screen } = withMenu()
 
-    expect(
-      screen.element.querySelector('.vk-play__menu-button button')?.textContent,
-    ).toBe('Menu')
+    expect(screen.element.querySelector('.vk-play__menu-button button')?.textContent).toBe('Menu')
   })
 
   it('opens on the four things it offers', () => {
@@ -680,8 +675,9 @@ describe('playScreen game menu', () => {
     const { screen } = withMenu({ canUndo: () => false })
     openMenu(screen)
 
-    const undo = [...screen.element.querySelectorAll<HTMLButtonElement>('.vk-play__menu button')]
-      .find((b) => b.textContent === 'Undo')
+    const undo = [
+      ...screen.element.querySelectorAll<HTMLButtonElement>('.vk-play__menu button'),
+    ].find((b) => b.textContent === 'Undo')
     expect(undo?.disabled).toBe(true)
   })
 

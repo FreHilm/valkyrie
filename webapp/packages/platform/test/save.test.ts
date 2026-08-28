@@ -406,7 +406,8 @@ describe('writeSave', () => {
   it('writes an archive the reader can open again', async () => {
     const { context } = await makeContext()
     await writeSave(context, 1, {
-      state: '[Quest]\nvalkyrie=2.5.0\nquestname=Probe\ntime=2026-08-28 20:00:00\npath=/quests/probe/quest.ini\n\n[Log]\nquest0=You arrive.\n\n[Packs]\nMoMBase\n',
+      state:
+        '[Quest]\nvalkyrie=2.5.0\nquestname=Probe\ntime=2026-08-28 20:00:00\npath=/quests/probe/quest.ini\n\n[Log]\nquest0=You arrive.\n\n[Packs]\nMoMBase\n',
     })
 
     const loaded = await loadSave(context, 1)
@@ -418,7 +419,8 @@ describe('writeSave', () => {
   it('shows up in the save list with its metadata', async () => {
     const { context } = await makeContext()
     await writeSave(context, 2, {
-      state: '[Quest]\nvalkyrie=2.5.0\nquestname=Probe\ntime=2026-08-28 20:00:00\npath=/quests/probe/quest.ini\n',
+      state:
+        '[Quest]\nvalkyrie=2.5.0\nquestname=Probe\ntime=2026-08-28 20:00:00\npath=/quests/probe/quest.ini\n',
     })
 
     const listed = (await listSaves(context)).find((s) => s.slot === 2)
@@ -451,8 +453,7 @@ describe('writeSave', () => {
 
   it('replaces what was in the slot', async () => {
     const { context } = await makeContext()
-    const at = (name: string) =>
-      `[Quest]\nvalkyrie=2.5.0\nquestname=${name}\npath=/q/quest.ini\n`
+    const at = (name: string) => `[Quest]\nvalkyrie=2.5.0\nquestname=${name}\npath=/q/quest.ini\n`
     await writeSave(context, 1, { state: at('First') })
     await writeSave(context, 1, { state: at('Second') })
 

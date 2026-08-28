@@ -78,7 +78,11 @@ describe('QuestSession save round trip', () => {
 
     const names = quest.runtime.boardItems().map((i) => i.name)
     expect(names.length).toBeGreaterThan(0)
-    expect(roundTrip(quest).runtime.boardItems().map((i) => i.name)).toEqual(names)
+    expect(
+      roundTrip(quest)
+        .runtime.boardItems()
+        .map((i) => i.name),
+    ).toEqual(names)
   })
 
   it('carries the variables across', () => {

@@ -293,10 +293,7 @@ describe('board pieces', () => {
   it('leaves the scenery out', () => {
     // Tabbing through twenty floor tiles to reach the door serves nobody.
     const view = board({ label: 'Board' })
-    view.setItems([
-      item('TileFoyer', { layer: Layer.TILE, interactive: false }),
-      item('TokenDoor'),
-    ])
+    view.setItems([item('TileFoyer', { layer: Layer.TILE, interactive: false }), item('TokenDoor')])
 
     expect(names(view)).toEqual(['TokenDoor'])
   })

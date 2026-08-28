@@ -85,7 +85,14 @@ export {
   deleteSave,
   saveExists,
 } from './save.js'
-export type { SaveContext, SaveMetadata, WriteSaveOptions, SaveRejection, LoadedSave, ExportedSave } from './save.js'
+export type {
+  SaveContext,
+  SaveMetadata,
+  WriteSaveOptions,
+  SaveRejection,
+  LoadedSave,
+  ExportedSave,
+} from './save.js'
 export { loadConfig, saveConfig, autoSaveConfig } from './configStore.js'
 
 export { AudioEngine, FADE_SECONDS, volumeFromConfig } from './audio.js'

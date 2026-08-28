@@ -89,7 +89,12 @@ export type {
   QuestVariable,
 } from './screens/questLog.js'
 export { gameMenu } from './screens/gameMenu.js'
-export type { GameMenu, GameMenuOptions, GameMenuStrings, GameMenuView } from './screens/gameMenu.js'
+export type {
+  GameMenu,
+  GameMenuOptions,
+  GameMenuStrings,
+  GameMenuView,
+} from './screens/gameMenu.js'
 export { saveSelect } from './screens/saveSelect.js'
 export type {
   SaveSelect,

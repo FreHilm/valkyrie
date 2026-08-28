@@ -159,7 +159,9 @@ describe('puzzleRenderer', () => {
     }
 
     expect(cycle(CODE, 4)).toBe('1')
-    expect(cycle('[PuzzleLock]\nclass=code\npuzzlelevel=3\npuzzlealtlevel=9\nbuttons=1\nevent1=\n', 4)).toBe('5')
+    expect(
+      cycle('[PuzzleLock]\nclass=code\npuzzlelevel=3\npuzzlealtlevel=9\nbuttons=1\nevent1=\n', 4),
+    ).toBe('5')
   })
 
   it('draws nothing for a puzzle whose component is not one', () => {

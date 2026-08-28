@@ -88,9 +88,7 @@ export function saveSelect(options: SaveSelectOptions): SaveSelect {
 
   function slotRow(entry: SaveSlotView): HTMLElement {
     const name =
-      entry.slot === 0
-        ? strings.autosave
-        : rawText(`${textOf(strings.slot)} ${String(entry.slot)}`)
+      entry.slot === 0 ? strings.autosave : rawText(`${textOf(strings.slot)} ${String(entry.slot)}`)
 
     // An empty slot can be written to but not opened, so in load mode it is
     // shown and disabled rather than hidden — four slots that stay in the same

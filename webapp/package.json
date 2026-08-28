@@ -18,6 +18,7 @@
     "format:check": "prettier --check .",
     "dev": "npm run dev --workspace @valkyrie/app",
     "milestone": "tsx tools/milestone/play.mjs",
+    "playthrough": "node tools/playthrough/playthrough.mjs",
     "build:site": "npm run build:site --workspace @valkyrie/app"
   },
   "devDependencies": {

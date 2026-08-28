@@ -323,13 +323,7 @@ export async function loadQuest(
     )
   }
 
-  await addQuestText(
-    fs,
-    dir,
-    questIni.data.get('QuestText'),
-    localization,
-    quest.defaultLanguage,
-  )
+  await addQuestText(fs, dir, questIni.data.get('QuestText'), localization, quest.defaultLanguage)
 
   return { quest, components, path: dir }
 }

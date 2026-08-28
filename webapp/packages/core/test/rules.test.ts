@@ -641,7 +641,6 @@ describe('PuzzleTower moves', () => {
   })
 })
 
-
 describe('slidePuzzleLayouts', () => {
   it('ships every layout the C# resource carries', () => {
     // `Assets/Resources/slidepuzzles.txt`. Without these `PuzzleSlide.generate`
