@@ -688,3 +688,29 @@ export class PuzzleTower implements PuzzleState {
     return `${result}\n`
   }
 }
+
+/**
+ * Rebuilds a puzzle from the section a save wrote for it.
+ *
+ * The section name carries both the class and the quest's own name for it —
+ * `[PuzzleSlideDoorLock]` — because that is how `toSectionString` composes it.
+ * A section naming a class this port does not know is skipped rather than
+ * guessed at, which is what an unopenable save would otherwise become.
+ */
+export function restorePuzzle(
+  section: string,
+  fields: ContentFields,
+): { name: string; state: PuzzleState } | null {
+  const classes = [
+    ['PuzzleSlide', (f: ContentFields) => PuzzleSlide.fromSaved(f)],
+    ['PuzzleCode', (f: ContentFields) => PuzzleCode.fromSaved(f)],
+    ['PuzzleImage', (f: ContentFields) => PuzzleImage.fromSaved(f)],
+    ['PuzzleTower', (f: ContentFields) => PuzzleTower.fromSaved(f)],
+  ] as const
+
+  for (const [prefix, build] of classes) {
+    if (!section.startsWith(prefix)) continue
+    return { name: section.slice(prefix.length), state: build(fields) }
+  }
+  return null
+}

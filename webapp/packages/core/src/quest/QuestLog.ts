@@ -77,6 +77,12 @@ export class QuestLog implements Iterable<LogEntry> {
     this.entries.push(entry)
   }
 
+  /** Takes on another log's entries, for a save being restored in place. */
+  replaceWith(other: QuestLog): void {
+    this.entries.length = 0
+    this.entries.push(...other.toArray())
+  }
+
   [Symbol.iterator](): Iterator<LogEntry> {
     return this.entries[Symbol.iterator]()
   }

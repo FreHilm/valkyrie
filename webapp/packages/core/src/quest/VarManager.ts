@@ -260,6 +260,20 @@ export class VarManager {
   }
 
   /** Serialises to a `[Vars]` section. Zero-valued variables are omitted. */
+  /**
+   * Takes on a saved `[Vars]` section, replacing what is held.
+   *
+   * The names are written escaped when they start with '#', because that
+   * starts a comment in an ini file; this undoes that.
+   */
+  restoreFrom(section: ReadonlyMap<string, string>): void {
+    this.vars.clear()
+    for (const [name, value] of section) {
+      const key = name.startsWith('\\') ? name.slice(1) : name
+      this.vars.set(key, parseFloatStrict(value) ?? 0)
+    }
+  }
+
   toString(): string {
     let result = '[Vars]\n'
     for (const [key, value] of this.vars) {

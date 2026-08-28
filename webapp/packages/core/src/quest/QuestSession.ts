@@ -14,6 +14,9 @@
 import { ActivationInstance } from './ActivationInstance.js'
 import type { ActivationView } from './ActivationInstance.js'
 import { EventManager } from './EventManager.js'
+import { IniData } from '../ini/IniData.js'
+import { parseIntInvariant } from '../config/parse.js'
+import { QuestLog } from './QuestLog.js'
 import { packVariables } from '../content/packSelection.js'
 import type { AudioRequest, CameraCommand } from './EventManager.js'
 import { QuestRuntime } from './QuestRuntime.js'
@@ -38,7 +41,7 @@ import type { QuestBundle } from './questAdapter.js'
 import { QuestButtonData } from './QuestButtonData.js'
 import type { QuestComponent } from './QuestComponent.js'
 import { Puzzle as QuestPuzzle, QuestEvent, Spawn as QuestSpawn } from './QuestComponent.js'
-import { PuzzleCode, PuzzleImage, PuzzleSlide, PuzzleTower } from './puzzles.js'
+import { PuzzleCode, PuzzleImage, PuzzleSlide, PuzzleTower, restorePuzzle } from './puzzles.js'
 import type { PuzzleState } from './puzzles.js'
 import type { ContentFields } from '../content/types.js'
 import { outputSymbolReplace } from './symbols.js'
@@ -56,6 +59,33 @@ export interface SessionButton {
   index: number
   /** Shown but not pressable — a failed condition with the DISABLE action. */
   disabled: boolean
+}
+
+/** As `QuestComponent` reads them: a missing or unparseable field is zero. */
+const intOrZero = (value: string | undefined): number =>
+  value === undefined ? 0 : (parseIntInvariant(value) ?? 0)
+const boolOrFalse = (value: string | undefined): boolean =>
+  value !== undefined && value.trim().toLowerCase() === 'true'
+
+/** What a save records that the quest itself does not know. */
+export interface SaveStateOptions {
+  /** `path`: where the scenario was loaded from. */
+  questPath: string
+  /** `originalpath`: the package it came from, which a load re-extracts. */
+  originalPath: string
+  questName: string
+  valkyrieVersion: string
+  /** The packs that were loaded, so a load can ask for the same ones. */
+  packs: readonly string[]
+  /** Whole minutes played, carried across sessions. */
+  duration: number
+  /** Injected rather than read from a clock, so a replay is deterministic. */
+  time: string
+  /**
+   * `ToString(false)`. The undo stack leaves the log out — an undo restores
+   * the board, not what the player has read.
+   */
+  includeLog?: boolean
 }
 
 /**
@@ -531,6 +561,192 @@ export class QuestSession {
     if (button.conditionFailedAction === 'NONE') return true
     if (!button.hasCondition) return true
     return this.runtime.vars.test(button.condition)
+  }
+
+  /**
+   * The quest's live state as save-file text, `Quest.ToString`.
+   *
+   * `includeLog` is false for the undo stack, which the C# also writes without
+   * it: an undo restores the board, not what the player has read.
+   *
+   * DEVIATION, settled in `adr/0001`: saves do not interoperate with the Unity
+   * build, so this records what this port models rather than every key the C#
+   * emits. Absent are the camera position, hero skills and classes, and shops
+   * — none of which exist here. The shape is the C#'s because the reader
+   * already parses it, not because a Unity build could open it.
+   */
+  toSaveString(options: SaveStateOptions): string {
+    const nl = '\n'
+    let r = `[Quest]${nl}`
+    r += `time=${options.time}${nl}`
+    r += `duration=${String(options.duration)}${nl}`
+    r += `valkyrie=${options.valkyrieVersion}${nl}`
+    r += `path=${options.questPath}${nl}`
+    r += `originalpath=${options.originalPath}${nl}`
+    r += `questname=${options.questName}${nl}`
+    r += `horror=${this.rounds.phase === MoMPhase.horror ? 'True' : 'False'}${nl}`
+    r += `heroesSelected=${this.runtime.heroes.length > 0 ? 'True' : 'False'}${nl}`
+
+    r += `${nl}[Packs]${nl}`
+    for (const pack of options.packs) r += `${pack}${nl}`
+
+    // `ordered_boardItems` in the C#, and ordered for the same reason: what
+    // covers what on the board is the order things were added in.
+    r += `${nl}[Board]${nl}`
+    // A name starting with '#' would be read back as a comment, which is why
+    // the C# escapes every one of them.
+    for (const item of this.runtime.boardItems()) r += `\\${item.name}${nl}`
+
+    r += nl + this.runtime.vars.toString()
+
+    r += `[Items]${nl}`
+    for (const item of this.runtime.items()) r += `${item}${nl}`
+
+    r += `${nl}[EventQuota]${nl}`
+    for (const [name, count] of this.runtime.eventQuota) r += `${name}=${String(count)}${nl}`
+
+    for (const [index, hero] of this.runtime.heroes.entries()) {
+      r += `${nl}[Hero${String(index)}]${nl}`
+      r += `id=${String(index)}${nl}`
+      r += `activated=${hero.activated ? 'True' : 'False'}${nl}`
+      if (hero.heroName !== null) r += `type=${hero.heroName}${nl}`
+    }
+
+    for (const [index, monster] of this.runtime.monsters.entries()) {
+      // The C# keys this by type plus a duplicate number; the index is what
+      // makes it unique here, and it is what the board order already uses.
+      r += `${nl}[Monster${String(index)}]${nl}`
+      r += `type=${monster.monsterName}${nl}`
+      r += `activated=${monster.activated ? 'True' : 'False'}${nl}`
+      r += `minionStarted=${monster.minionStarted ? 'True' : 'False'}${nl}`
+      r += `masterStarted=${monster.masterStarted ? 'True' : 'False'}${nl}`
+      r += `unique=${monster.unique ? 'True' : 'False'}${nl}`
+      r += `damage=${String(monster.damage)}${nl}`
+      r += `healthmod=${String(monster.health)}${nl}`
+      r += `spawnEventName=${monster.spawnedBy}${nl}`
+      const activation = monster.currentActivation
+      if (activation !== null) r += `activation=${activation.ad.sectionName}${nl}`
+    }
+
+    for (const [name, puzzle] of this.puzzles) r += nl + puzzle.toSectionString(name)
+
+    r += `${nl}[Log]${nl}`
+    if (options.includeLog !== false) r += this.runtime.log.toString()
+
+    r += `${nl}[EventList]${nl}`
+    for (const [index, name] of this.events.history.entries()) {
+      r += `Event${String(index)}=${name}${nl}`
+    }
+
+    r += `${nl}[SelectMonster]${nl}`
+    for (const [spawn, monster] of this.monsterSelect) r += `${spawn}=${monster}${nl}`
+
+    r += `${nl}[SelectItem]${nl}`
+    for (const [item, resolved] of this.runtime.itemSelect) r += `${item}=${resolved}${nl}`
+
+    r += `${nl}[ItemInspect]${nl}`
+    for (const [item, event] of this.runtime.itemInspect) r += `${item}=${event}${nl}`
+
+    r += `${nl}[EventManager]${nl}`
+    r += `queue=${this.events.queued.join(' ')}${nl}`
+    if (this.events.current !== null) r += `currentevent=${this.events.current.sectionName}${nl}`
+
+    return r
+  }
+
+  /**
+   * Puts a saved state back onto a freshly loaded quest, `Quest(saveData)`.
+   *
+   * The quest's components are already loaded — a save records *state*, not
+   * content — so everything here is looked up by name against what the
+   * scenario declares. A name the scenario no longer has is dropped rather
+   * than resurrected, which is what happens when a save outlives an edit.
+   */
+  restoreFrom(data: IniData): void {
+    const runtime = this.runtime
+
+    // Board, in the order it was written: what covers what depends on it.
+    runtime.clearBoard()
+    for (const name of data.getSection('Board')?.keys() ?? []) {
+      // Written escaped so a leading '#' is not read as a comment.
+      runtime.restoreBoardItem(name.startsWith('\\') ? name.slice(1) : name)
+    }
+
+    runtime.vars.restoreFrom(data.getSection('Vars') ?? new Map())
+
+    runtime.restoreItems([...(data.getSection('Items')?.keys() ?? [])])
+
+    runtime.eventQuota.clear()
+    for (const [name, count] of data.getSection('EventQuota') ?? []) {
+      runtime.eventQuota.set(name, intOrZero(count))
+    }
+
+    runtime.heroes.length = 0
+    for (const [section, fields] of data.data) {
+      if (!section.startsWith('Hero')) continue
+      const type = fields.get('type')
+      runtime.heroes.push({
+        heroName: type === undefined || type.length === 0 ? null : type,
+        activated: boolOrFalse(fields.get('activated')),
+      })
+    }
+
+    runtime.monsters.length = 0
+    for (const [section, fields] of data.data) {
+      if (!section.startsWith('Monster')) continue
+      const type = fields.get('type')
+      if (type === undefined || type.length === 0) continue
+      runtime.monsters.push({
+        monsterName: type,
+        spawnedBy: fields.get('spawnEventName') ?? '',
+        unique: boolOrFalse(fields.get('unique')),
+        health: intOrZero(fields.get('healthmod')),
+        damage: intOrZero(fields.get('damage')),
+        activated: boolOrFalse(fields.get('activated')),
+        minionStarted: boolOrFalse(fields.get('minionStarted')),
+        masterStarted: boolOrFalse(fields.get('masterStarted')),
+        // The activation is redrawn rather than restored: the C# notes it
+        // "currently doesn't save the effect string", so what it writes could
+        // not be shown again anyway.
+        currentActivation: null,
+      })
+    }
+
+    this.puzzles.clear()
+    for (const [section, fields] of data.data) {
+      if (!section.startsWith('Puzzle')) continue
+      const built = restorePuzzle(section, fields)
+      if (built !== null) this.puzzles.set(built.name, built.state)
+    }
+
+    runtime.restoreLog(QuestLog.fromSection(data.getSection('Log') ?? new Map()))
+
+    // `Event0=`, `Event1=` ... in order, which is what the end screen counts.
+    this.events.restoreHistory([...(data.getSection('EventList')?.values() ?? [])])
+
+    this.monsterSelect.clear()
+    for (const [spawn, monster] of data.getSection('SelectMonster') ?? []) {
+      this.monsterSelect.set(spawn, monster)
+    }
+    runtime.itemSelect.clear()
+    for (const [item, resolved] of data.getSection('SelectItem') ?? []) {
+      runtime.itemSelect.set(item, resolved)
+    }
+    runtime.itemInspect.clear()
+    for (const [item, event] of data.getSection('ItemInspect') ?? []) {
+      runtime.itemInspect.set(item, event)
+    }
+
+    this.rounds.phase =
+      data.get('Quest', 'horror').toLowerCase() === 'true' ? MoMPhase.horror : MoMPhase.investigator
+
+    // Last, because it decides what is on screen: the events the player had
+    // not answered yet, and the one they were looking at.
+    const queued = data.get('EventManager', 'queue').split(' ').filter((n) => n.length > 0)
+    const currentName = data.get('EventManager', 'currentevent')
+    const current = currentName.length === 0 ? null : this.events.definition(currentName)
+    this.events.restoreQueue(queued, current)
+    this.pending = null
   }
 
   /**

@@ -149,6 +149,33 @@ export class QuestRuntime {
   }
 
   /**
+   * Restoring a save, `Quest(saveData)`.
+   *
+   * A save records state, not content: every name here is looked up against
+   * the components the scenario already declares, and one it no longer has is
+   * dropped rather than resurrected.
+   */
+  clearBoard(): void {
+    this.board.clear()
+  }
+
+  /** Puts one saved board item back, keeping the order it was written in. */
+  restoreBoardItem(name: string): void {
+    const component = this.components.get(name)
+    if (component === undefined) return
+    this.board.set(name, { name, component })
+  }
+
+  restoreItems(items: readonly string[]): void {
+    this.heldItems.clear()
+    for (const item of items) this.heldItems.add(item)
+  }
+
+  restoreLog(log: QuestLog): void {
+    this.log.replaceWith(log)
+  }
+
+  /**
    * `InvestigatorItems` dealing out what the party begins with.
    *
    * Separate from `add`, which places a board component: these are cards in

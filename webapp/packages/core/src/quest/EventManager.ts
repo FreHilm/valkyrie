@@ -129,6 +129,28 @@ export class EventManager {
   private readonly questTransitions = new Set<string>()
 
   current: EventDefinition | null = null
+
+  /**
+   * Puts a saved queue back, `EventManager(saveData)`.
+   *
+   * The current event is restored by name only: what it *is* comes from the
+   * quest's own components, which are loaded before this runs.
+   */
+  definition(name: string): EventDefinition | null {
+    return this.context.events.get(name) ?? null
+  }
+
+  /** `[EventList]`: the events already answered, which the end screen lists. */
+  restoreHistory(names: readonly string[]): void {
+    this.answered.length = 0
+    this.answered.push(...names)
+  }
+
+  restoreQueue(queued: readonly string[], current: EventDefinition | null): void {
+    this.stack.length = 0
+    this.stack.push(...queued)
+    this.current = current
+  }
   /**
    * `monsterimage`: the monster whose portrait an event shows. Cleared when
    * the event stack drains, matching the C#.
