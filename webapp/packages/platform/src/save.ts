@@ -12,6 +12,7 @@
 import { QuestLog, readFromString, versionNewer, versionNewerOrEqual } from '@valkyrie/core'
 import type { IniData } from '@valkyrie/core'
 
+import { zip } from 'fflate'
 import { ExtractMode, extract, readArchive } from './archive.js'
 import type { ArchiveEntry } from './archive.js'
 import type { FileSystem, StoragePaths } from './filesystem.js'
@@ -313,4 +314,48 @@ export async function saveExists(context: SaveContext): Promise<boolean> {
     if (await context.fs.exists(saveFilePath(context.paths, slot))) return true
   }
   return false
+}
+
+/** What goes into a save archive besides the state itself. */
+export interface WriteSaveOptions {
+  /** The serialised quest state, written as `save.ini`. */
+  state: string
+  /** A screenshot for the save list, or nothing. */
+  image?: Uint8Array | null
+  /**
+   * The scenario's own files, carried so a save opens even if the quest has
+   * since been deleted or edited. `SaveManager.SaveWithScreen` copies the
+   * quest content in for the same reason.
+   */
+  questFiles?: ReadonlyMap<string, Uint8Array>
+}
+
+/**
+ * Writes a save to a slot, `SaveManager.SaveWithScreen`.
+ *
+ * DEVIATION: the C# updates the existing zip on every autosave after the
+ * first, to avoid rewriting the quest content each time. This always writes a
+ * whole archive — OPFS has no in-place zip update, and a save that is written
+ * atomically cannot be left half-updated by a tab closing mid-write.
+ */
+export async function writeSave(
+  context: SaveContext,
+  slot: number,
+  options: WriteSaveOptions,
+): Promise<void> {
+  const files: Record<string, Uint8Array> = {
+    [SAVE_INI]: new TextEncoder().encode(options.state),
+  }
+  if (options.image != null) files[SAVE_IMAGE] = options.image
+  for (const [name, bytes] of options.questFiles ?? []) files[name] = bytes
+
+  const archive = await new Promise<Uint8Array>((resolve, reject) => {
+    zip(files, { level: 6 }, (error, data) => {
+      if (error !== null) reject(error instanceof Error ? error : new Error(String(error)))
+      else resolve(data)
+    })
+  })
+
+  const path = saveFilePath(context.paths, slot)
+  await context.fs.writeBytes(path, archive)
 }
