@@ -40,6 +40,13 @@ export interface TokenArt {
   height: number
 }
 
+/** The space an event points at, and the card it hands over if it has one. */
+export interface BoardHighlight {
+  at: Point
+  /** The resolved item whose card is drawn there, or null for a plain mark. */
+  item: string | null
+}
+
 export interface SceneSources {
   /** Art for a `Tile` component's side, or null when it is unknown. */
   tile: (component: string) => TileArt | null
@@ -47,6 +54,8 @@ export interface SceneSources {
   token: (component: string) => TokenArt | null
   /** Art for a monster on the board. */
   monster: (monsterName: string) => TokenArt | null
+  /** Card art for an item a highlight event hands over. */
+  item?: (id: string) => TokenArt | null
   /** Descent aligns tiles to square corners; Mansions does not. */
   onGrid: boolean
   /** Receives the reason an item could not be placed. */
@@ -70,6 +79,12 @@ export function buildScene(
   items: readonly RuntimeItem[],
   monsters: readonly { monsterName: string; location?: Point }[],
   sources: SceneSources,
+  /**
+   * `TokenBoard.AddHighlight`: the space the current event points at. Not a
+   * component — it belongs to the event rather than the board, and goes away
+   * with it — so it is passed in rather than found among the items.
+   */
+  highlight?: BoardHighlight | null,
 ): SceneItem[] {
   const scene: SceneItem[] = []
 
@@ -151,6 +166,26 @@ export function buildScene(
       image: null,
       ...(art === null ? { tint: 'var(--vk-monster-unknown, #b91c1c)' } : {}),
       label: monster.monsterName,
+      source: art === null ? null : { path: art.image, ...(art.crop ? { crop: art.crop } : {}) },
+    })
+  }
+
+  if (highlight !== undefined && highlight !== null) {
+    // `AddHighlight` draws the item's own card where the event points, and
+    // falls back to a marker when the event hands nothing over — or hands
+    // over more than one thing, which no card could stand for.
+    const art = highlight.item === null ? null : (sources.item?.(highlight.item) ?? null)
+    const size = art ?? { image: '', width: 1, height: 1 }
+    scene.push({
+      id: 'highlight',
+      layer: Layer.HIGHLIGHT,
+      placed: placeToken({ location: highlight.at, width: size.width, height: size.height }),
+      image: null,
+      // DEVIATION: the C# marker is a pulsing `sprites/target` reticle. A
+      // tinted square says the same thing without an animation loop running
+      // on the canvas for one marker, or a sprite to ship for it.
+      ...(art === null ? { tint: 'var(--vk-highlight, #eab30899)' } : {}),
+      label: 'Highlighted space',
       source: art === null ? null : { path: art.image, ...(art.crop ? { crop: art.crop } : {}) },
     })
   }

@@ -520,3 +520,41 @@ describe('playScreen end of quest', () => {
     expect(screen.element.querySelector('.vk-play__controls')?.textContent).toBe('')
   })
 })
+
+describe('playScreen granted item', () => {
+  const giving = (over: Record<string, unknown> = {}) => ({
+    kind: 'event',
+    text: 'You find a key.',
+    buttons: [{ label: 'Take it', index: 0, disabled: false }],
+    grantedItem: 'ItemUniqueBrassKey',
+    ...over,
+  })
+
+  it('draws the card beside an ordinary event', () => {
+    // `DialogWindow.DrawItem`.
+    const { session: s } = session(giving())
+    const screen = playScreen({
+      session: s,
+      sources: SOURCES,
+      itemImage: () => 'blob:card',
+    })
+    document.body.append(screen.element)
+
+    expect(screen.element.querySelector('.vk-event__img')?.getAttribute('src')).toBe('blob:card')
+  })
+
+  it('leaves it off a highlight event, which has put it on the board', () => {
+    // `DialogWindow.cs:211`: `DrawItem` returns early for a highlight, because
+    // `AddHighlight` has already drawn the card where the event points. Both
+    // would otherwise show the same card twice.
+    const { session: s } = session(giving({ highlight: { x: 2, y: 2 } }))
+    const screen = playScreen({
+      session: s,
+      sources: SOURCES,
+      itemImage: () => 'blob:card',
+    })
+    document.body.append(screen.element)
+
+    expect(screen.element.querySelector('.vk-event__img')).toBeNull()
+  })
+})

@@ -1056,6 +1056,12 @@ async function play(
       gameType,
       pixelsPerSquare,
     }),
+    // `DrawItem`: the card an event hands over, drawn beside its dialog.
+    itemImage: (id) => {
+      const data = content.tryGet(ItemData, id)
+      const file = data === undefined ? null : resolveTexture(data.image)
+      return file === null ? null : imageUrl(file)
+    },
     monsterList: () =>
       session.runtime.monsters.map((instance, index) => {
         const profile = monsterProfile(content, components, instance.monsterName, questPath)

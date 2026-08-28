@@ -88,6 +88,14 @@ export type SessionView =
       buttons: SessionButton[]
       /** Present when the event asks for a number instead of a choice. */
       quota?: QuotaRequest
+      /** `AddHighlight`: the board space this event points at. */
+      highlight?: { x: number; y: number }
+      /**
+       * `DrawItem`: the one item this event hands over, already resolved to
+       * the card it turned into. Shown on the board when the event is a
+       * highlight, and beside the dialog when it is not.
+       */
+      grantedItem?: string
     }
   | { kind: 'puzzle'; puzzle: ActivePuzzle }
   | { kind: 'activation'; monster: MonsterInstance; activation: ActivationInstance }
@@ -280,6 +288,9 @@ export class QuestSession {
 
       const quota = this.quotaFor(current.sectionName)
       const buttons = this.buttons(current.sectionName)
+      const component = this.options.components.get(current.sectionName)
+      const event = component instanceof QuestEvent ? component : null
+      const granted = this.grantedItem(event)
       return {
         kind: 'event',
         name: current.sectionName,
@@ -289,6 +300,8 @@ export class QuestSession {
         // a total that has not got there yet, not something to press.
         buttons: quota === null ? buttons : buttons.slice(0, 1),
         ...(quota === null ? {} : { quota }),
+        ...(event?.highlight === true ? { highlight: { ...event.location } } : {}),
+        ...(granted === null ? {} : { grantedItem: granted }),
       }
     }
 
@@ -390,6 +403,21 @@ export class QuestSession {
   }
 
   /** The player pressed a button. */
+  /**
+   * The single item an event hands over, resolved to the card it became.
+   *
+   * `TokenBoard.AddHighlight` and `DialogWindow.DrawItem` ask the same
+   * question: exactly one `QItem` among the components this event adds, and
+   * one the quest has already resolved. Anything else — none, or several — and
+   * neither draws a card.
+   */
+  private grantedItem(event: QuestEvent | null): string | null {
+    if (event === null) return null
+    const items = event.addComponents.filter((name) => name.startsWith('QItem'))
+    if (items.length !== 1) return null
+    return this.runtime.itemSelect.get(items[0]!) ?? null
+  }
+
   /** `quotaInc` greys out at ten, so that is as high as the spinner goes. */
   private static readonly QUOTA_MAX = 10
 

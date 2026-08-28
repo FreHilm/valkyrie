@@ -814,3 +814,95 @@ event2=
     expect(view.kind === 'event' ? view.buttons.length : null).toBe(2)
   })
 })
+
+/**
+ * `highlight`, and the single item an event hands over.
+ *
+ * `TokenBoard.AddHighlight` and `DialogWindow.DrawItem` ask the same question
+ * of an event — exactly one resolved `QItem` among what it adds — and answer
+ * it in different places: on the board when the event is a highlight, beside
+ * the dialog when it is not. Both were parsed and neither was applied, so five
+ * scenarios never showed the player where to look.
+ */
+describe('QuestSession highlight', () => {
+  it('reports the space a highlight event points at', () => {
+    const quest = session(`[EventLook]
+trigger=EventStart
+highlight=true
+xposition=4
+yposition=-2
+buttons=1
+event1=
+`)
+    quest.start()
+
+    const view = quest.view()
+    expect(view.kind === 'event' ? view.highlight : null).toEqual({ x: 4, y: -2 })
+  })
+
+  it('says nothing about a space for an ordinary event', () => {
+    const quest = session(`[EventPlain]
+trigger=EventStart
+xposition=4
+yposition=-2
+buttons=1
+event1=
+`)
+    quest.start()
+
+    const view = quest.view()
+    expect(view.kind === 'event' ? view.highlight : 'absent').toBeUndefined()
+  })
+
+  it('resolves the one item an event hands over', () => {
+    // `itemSelect` is filled by setup, which resolves every `QItem` the quest
+    // declares — not just the ones the party starts with.
+    const quest = session(`[EventGive]
+trigger=EventStart
+add=QItemKey
+buttons=1
+event1=
+[QItemKey]
+itemname=ItemUniqueBrassKey
+`)
+    quest.runtime.itemSelect.set('QItemKey', 'ItemUniqueBrassKey')
+    quest.start()
+
+    const view = quest.view()
+    expect(view.kind === 'event' ? view.grantedItem : null).toBe('ItemUniqueBrassKey')
+  })
+
+  it('names no card when the event hands over more than one thing', () => {
+    // `AddHighlight` and `DrawItem` both bail at `items != 1`: no single card
+    // could stand for two.
+    const quest = session(`[EventGive]
+trigger=EventStart
+add=QItemKey QItemDiary
+buttons=1
+event1=
+[QItemKey]
+itemname=ItemUniqueBrassKey
+[QItemDiary]
+itemname=ItemUniqueCultistsJournal
+`)
+    quest.runtime.itemSelect.set('QItemKey', 'ItemUniqueBrassKey')
+    quest.runtime.itemSelect.set('QItemDiary', 'ItemUniqueCultistsJournal')
+    quest.start()
+
+    const view = quest.view()
+    expect(view.kind === 'event' ? view.grantedItem : 'absent').toBeUndefined()
+  })
+
+  it('names no card for an item the quest has not resolved', () => {
+    const quest = session(`[EventGive]
+trigger=EventStart
+add=QItemMystery
+buttons=1
+event1=
+`)
+    quest.start()
+
+    const view = quest.view()
+    expect(view.kind === 'event' ? view.grantedItem : 'absent').toBeUndefined()
+  })
+})

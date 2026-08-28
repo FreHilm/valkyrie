@@ -176,3 +176,62 @@ describe('sceneBounds', () => {
     expect(bounds?.min.y).toBeLessThanOrEqual(-4)
   })
 })
+
+describe('buildScene highlight', () => {
+  // `TokenBoard.AddHighlight`: the mark belongs to the event, not the board,
+  // so it is passed in rather than found among the items — and goes away with
+  // the event that asked for it.
+  const highlightOf = (scene: ReturnType<typeof buildScene>) =>
+    scene.find((s) => s.id === 'highlight')
+
+  it('marks the space when the event hands nothing over', () => {
+    const scene = buildScene([], [], sources(), { at: { x: 3, y: -2 }, item: null })
+    const mark = highlightOf(scene)
+
+    expect(mark).toBeDefined()
+    expect(mark?.layer).toBe(Layer.HIGHLIGHT)
+    expect(mark?.source).toBeNull()
+    expect(mark?.tint).toBeDefined()
+  })
+
+  it('draws the item’s own card where the event points', () => {
+    const scene = buildScene([], [], sources({ item: () => TOKEN }), {
+      at: { x: 1, y: 1 },
+      item: 'ItemUniqueBrassKey',
+    })
+    const mark = highlightOf(scene)
+
+    expect(mark?.source).toEqual({ path: 'img/sheet', crop: TOKEN.crop })
+    // A card, not a marker: nothing is tinted over it.
+    expect(mark?.tint).toBeUndefined()
+  })
+
+  it('falls back to the marker when the card has no art', () => {
+    const scene = buildScene([], [], sources({ item: () => null }), {
+      at: { x: 1, y: 1 },
+      item: 'ItemUnknown',
+    })
+
+    expect(highlightOf(scene)?.tint).toBeDefined()
+  })
+
+  it('sits above everything else on the board', () => {
+    const scene = buildScene(
+      [item('TileFoyer', 'Tile'), item('TokenDoor', 'Token')],
+      [{ monsterName: 'Cultist' }],
+      sources(),
+      { at: { x: 0, y: 0 }, item: null },
+    )
+    const mark = highlightOf(scene)
+
+    for (const other of scene) {
+      if (other.id === 'highlight') continue
+      expect(other.layer, other.id).toBeLessThan(mark?.layer ?? -1)
+    }
+  })
+
+  it('marks nothing when no event is pointing anywhere', () => {
+    expect(highlightOf(buildScene([], [], sources()))).toBeUndefined()
+    expect(highlightOf(buildScene([], [], sources(), null))).toBeUndefined()
+  })
+})

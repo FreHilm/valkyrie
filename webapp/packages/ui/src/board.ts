@@ -23,9 +23,14 @@ export const Layer = {
   TILE: 0,
   TOKEN: 1,
   MONSTER: 2,
+  /** `AddHighlight` puts its marker over everything, which is the point. */
+  HIGHLIGHT: 3,
 } as const
 
 export type Layer = (typeof Layer)[keyof typeof Layer]
+
+/** Every layer, back to front. The draw order, and the whole of it. */
+export const LAYER_ORDER: readonly Layer[] = Object.values(Layer).sort((a, b) => a - b)
 
 export interface BoardItem {
   id: string
@@ -97,8 +102,10 @@ export function board(options: BoardOptions): Board {
     context.clearRect(0, 0, view.width, view.height)
 
     // Layers are drawn in order so tokens land above tiles and monsters above
-    // both, which is what the three Unity canvases encoded.
-    for (const layer of [Layer.TILE, Layer.TOKEN, Layer.MONSTER]) {
+    // both, which is what the Unity canvases encoded. Derived from `Layer`
+    // rather than listed: a layer left out of a hand-written list is not drawn
+    // at all, and nothing says so.
+    for (const layer of LAYER_ORDER) {
       for (const item of items) {
         if (item.layer !== layer) continue
         drawItem(context, item, camera, view)
@@ -196,6 +203,23 @@ function itemsBounds(items: readonly BoardItem[]): Rect | null {
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
 }
 
+/**
+ * Turns a `var(--name, fallback)` into a colour the canvas will accept.
+ *
+ * A canvas `fillStyle` is not a stylesheet: handed anything it cannot parse it
+ * keeps what it had, which starts as opaque black. So a tint written as a
+ * custom property drew a black square and looked like nothing had been drawn
+ * at all — quietly, because the setter does not throw.
+ */
+export function resolveColour(canvas: HTMLCanvasElement, value: string): string {
+  const match = /^var\(\s*(--[\w-]+)\s*(?:,\s*([^]*))?\)$/.exec(value.trim())
+  if (match === null) return value
+
+  const custom = getComputedStyle(canvas).getPropertyValue(match[1]!).trim()
+  if (custom.length > 0) return custom
+  return (match[2] ?? '').trim()
+}
+
 function drawItem(
   context: CanvasRenderingContext2D,
   item: BoardItem,
@@ -227,7 +251,7 @@ function drawItem(
   if (item.disabled === true) context.globalAlpha = 0.4
 
   if (item.tint !== undefined) {
-    context.fillStyle = item.tint
+    context.fillStyle = resolveColour(context.canvas, item.tint)
     context.fillRect(-width / 2, -height / 2, width, height)
   }
   if (item.image !== null) {

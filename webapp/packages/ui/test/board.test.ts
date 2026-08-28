@@ -12,7 +12,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { BoardCamera, DEFAULT_LIMITS } from '../src/camera.js'
-import { Layer, board } from '../src/board.js'
+import { LAYER_ORDER, Layer, board, resolveColour } from '../src/board.js'
 import type { BoardItem } from '../src/board.js'
 
 const view = { width: 800, height: 600 }
@@ -216,5 +216,53 @@ describe('board', () => {
     b.element.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
 
     expect(b.camera.centre.x).toBe(0)
+  })
+})
+
+describe('resolveColour', () => {
+  // A canvas `fillStyle` is not a stylesheet. Handed `var(--x, #fff)` it keeps
+  // what it had — opaque black — and does not throw, so a tint written that
+  // way drew a black square and read as nothing having been drawn at all.
+  const canvas = () => document.createElement('canvas')
+
+  it('leaves a plain colour alone', () => {
+    expect(resolveColour(canvas(), '#b91c1c')).toBe('#b91c1c')
+    expect(resolveColour(canvas(), 'red')).toBe('red')
+  })
+
+  it('falls back to the literal when the property is not set', () => {
+    expect(resolveColour(canvas(), 'var(--not-defined-anywhere, #eab308)')).toBe('#eab308')
+  })
+
+  it('prefers the property when the page defines one', () => {
+    const node = canvas()
+    node.style.setProperty('--vk-highlight', '#123456')
+    document.body.append(node)
+
+    expect(resolveColour(node, 'var(--vk-highlight, #eab308)')).toBe('#123456')
+    node.remove()
+  })
+
+  it('gives back nothing for a var with no fallback and no value', () => {
+    // Which the canvas then ignores, leaving what it had — the same as before,
+    // but now visibly a missing definition rather than a silent black square.
+    expect(resolveColour(canvas(), 'var(--nothing-here)')).toBe('')
+  })
+})
+
+describe('LAYER_ORDER', () => {
+  it('covers every layer there is', () => {
+    // The draw loop used to list its layers by hand, so `HIGHLIGHT` was added
+    // to `Layer`, put in the scene, and silently never painted — the board
+    // simply skipped it. Deriving the order is what stops that recurring.
+    expect([...LAYER_ORDER].sort((a, b) => a - b)).toEqual(
+      Object.values(Layer).sort((a, b) => a - b),
+    )
+  })
+
+  it('paints back to front', () => {
+    expect(LAYER_ORDER).toEqual([...LAYER_ORDER].sort((a, b) => a - b))
+    expect(LAYER_ORDER[0]).toBe(Layer.TILE)
+    expect(LAYER_ORDER[LAYER_ORDER.length - 1]).toBe(Layer.HIGHLIGHT)
   })
 })

@@ -15,6 +15,7 @@ import {
   contentMonster,
   CustomMonster,
   ImageData,
+  ItemData,
   MonsterData,
   MPlace,
   QuestUI,
@@ -168,6 +169,15 @@ export function questArt(options: ArtOptions): SceneSources {
       const place = components.get(monsterName)
       const tokenSize = place instanceof MPlace ? place.tokenSize : 'small'
       return { image, ...monsterSize(tokenSize, sizeOf(image), options.pixelsPerSquare) }
+    },
+
+    item: (id: string): TokenArt | null => {
+      // `TokenBoard.AddItem` draws the card itself where the event points, at
+      // the same one square every token occupies.
+      const data = content.tryGet(ItemData, id)
+      if (data === undefined) return null
+      const image = resolveTexture(data.image)
+      return image === null ? null : { image, width: 1, height: 1 }
     },
   }
 }

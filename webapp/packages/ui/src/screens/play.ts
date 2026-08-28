@@ -44,6 +44,10 @@ export interface PlayableSession {
     buttons?: readonly { label: string; index: number; disabled: boolean }[]
     /** Set when the event asks for a number rather than a choice. */
     quota?: { value: number; max: number }
+    /** `AddHighlight`: the board space the event points at. */
+    highlight?: { x: number; y: number }
+    /** `DrawItem`: the one item the event hands over, already resolved. */
+    grantedItem?: string
     monster?: { monsterName: string }
     activation?: { effect: string; masterActions: string; move: string; ad: unknown }
     phase?: string
@@ -199,6 +203,8 @@ export interface PlayOptions {
    * glyphs as named icons. Every screen this routes to gets the same one.
    */
   rich?: RichTextOptions
+  /** `DrawItem`: the card art for an item an event hands over. */
+  itemImage?: (id: string) => string | null
   /** Loads and crops an image; resolves to null when it is unavailable. */
   loadTexture?: (
     path: string,
@@ -373,10 +379,19 @@ export function playScreen(options: PlayOptions): PlayScreen {
   }
 
   function drawBoard(): void {
+    // The mark belongs to the event, not the board, so it is read fresh here
+    // and disappears with the event that asked for it.
+    const current = session.view()
+    const highlight =
+      current.kind === 'event' && current.highlight !== undefined
+        ? { at: current.highlight, item: current.grantedItem ?? null }
+        : null
+
     const scene = buildScene(
       session.runtime.boardItems() as never,
       session.runtime.monsters,
       options.sources,
+      highlight,
     )
 
     for (const item of scene) {
@@ -548,8 +563,15 @@ export function playScreen(options: PlayOptions): PlayScreen {
 
     if (current.kind === 'event') {
       const quota = current.quota
+      // `DrawItem` returns early for a highlight event, because
+      // `AddHighlight` has already put the card on the board.
+      const card =
+        current.highlight === undefined && current.grantedItem !== undefined
+          ? (options.itemImage?.(current.grantedItem) ?? null)
+          : null
       events.show({
         text: current.text ?? '',
+        ...(card === null ? {} : { image: card }),
         buttons: (current.buttons ?? []).map((b) => ({
           text: b.label,
           onPress: () => {

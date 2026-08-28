@@ -13,6 +13,10 @@
  */
 
 :root {
+  /* Board tints. Read by the canvas through `resolveColour`, which is why a
+     literal fallback is always given: a canvas cannot parse `var()` itself. */
+  --vk-monster-unknown: #b91c1c;
+  --vk-highlight: #eab30899;
   --u: 1.5rem;
 
   --vk-ink: #17181b;
