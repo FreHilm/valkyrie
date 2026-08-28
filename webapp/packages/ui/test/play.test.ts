@@ -40,6 +40,8 @@ function session(view: ReturnType<PlayableSession['view']>, over: Partial<Playab
   const base: PlayableSession = {
     view: () => view,
     press: (i) => calls.push(`press:${i}`),
+    pressQuota: (v) => calls.push(`pressQuota:${v}`),
+    logEntry: (t) => calls.push(`log:${t}`),
     finishPuzzle: (n) => calls.push(`finishPuzzle:${n}`),
     closePuzzle: () => calls.push('closePuzzle'),
     activate: (n) => calls.push(`activate:${n}`),
@@ -556,5 +558,64 @@ describe('playScreen granted item', () => {
     document.body.append(screen.element)
 
     expect(screen.element.querySelector('.vk-event__img')).toBeNull()
+  })
+})
+
+describe('playScreen combat log', () => {
+  // The two dialogs already handed their text over; `play.ts` passed a stub
+  // that dropped it, so the log held only event prose however much fighting
+  // had happened.
+  it('records an activation’s text as it is shown', () => {
+    // `ActivateDialogMoM.cs:35`.
+    const { calls } = make({
+      kind: 'activation',
+      monster: { monsterName: 'Zombie' },
+      activation: {
+        effect: 'The Zombie lurches.',
+        masterActions: 'It attacks.',
+        move: 'It moves.',
+        ad: {},
+      },
+    })
+
+    expect(calls).toContain('log:The Zombie lurches.')
+  })
+
+  it('records what a monster dialog shows', () => {
+    // `InvestigatorAttack.cs:69` and its evade and horror counterparts all
+    // reach the same place.
+    const { session: s, calls } = session({ kind: 'board' })
+    const screen = playScreen({
+      session: s,
+      sources: SOURCES,
+      monsterList: () => [{ index: 0, name: 'Cultist', image: null, activated: false }],
+      monsterView: (_index, close) => ({
+        monsterName: 'Cultist',
+        horrorPhase: false,
+        health: { health: 4, damage: 0, onDamageChange: () => {}, onDefeated: () => {} },
+        attackTypes: ['bladed'],
+        onAttack: () => 'The Cultist parries and cuts.',
+        onEvade: () => null,
+        onHorror: () => null,
+        onCancel: close,
+      }),
+    })
+    document.body.append(screen.element)
+
+    screen.element.querySelector<HTMLButtonElement>('.vk-play__monster')?.click()
+    press(screen.element, 'Attack')
+    press(screen.element, 'bladed')
+
+    expect(calls).toContain('log:The Cultist parries and cuts.')
+  })
+
+  it('escapes newlines on the way in, as a save carries them', () => {
+    const { calls } = make({
+      kind: 'activation',
+      monster: { monsterName: 'Zombie' },
+      activation: { effect: 'One.\nTwo.', masterActions: '', move: '', ad: {} },
+    })
+
+    expect(calls).toContain('log:One.\\nTwo.')
   })
 })

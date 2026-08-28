@@ -906,3 +906,55 @@ event1=
     expect(view.kind === 'event' ? view.grantedItem : 'absent').toBeUndefined()
   })
 })
+
+/**
+ * The combat log, which four dialogs write as they show their text.
+ *
+ * `ActivateDialogMoM.cs:35`, `InvestigatorAttack.cs:69`,
+ * `InvestigatorEvade.cs:49` and `HorrorCheck.cs:65` each log what the player
+ * just read. The port's dialogs already handed the text over; nothing was
+ * listening, so the log held only event prose.
+ */
+describe('QuestSession logEntry', () => {
+  const quest = () =>
+    session(`[EventOpening]
+trigger=EventStart
+buttons=1
+event1=
+`)
+
+  it('records what a dialog showed, where the player can read it back', () => {
+    const q = quest()
+    q.logEntry('The Cultist lunges. Roll {will}.')
+
+    expect(q.runtime.log.toArray().map((e) => e.entry)).toEqual([
+      'The Cultist lunges. Roll {will}.',
+    ])
+  })
+
+  it('records it for the player, not for a scenario author', () => {
+    // A warning is an editor entry and stays hidden; this is prose the player
+    // read and must be able to read again.
+    const q = quest()
+    q.logEntry('The Cultist lunges.')
+    q.logWarning('Warning: something is off')
+
+    const entries = q.runtime.log.toArray()
+    expect(entries[0]?.editor).toBe(false)
+    expect(entries[1]?.editor).toBe(true)
+  })
+
+  it('keeps the escaping the dialogs applied, so a save round-trips it', () => {
+    const q = quest()
+    q.logEntry('First line.\\nSecond line.')
+
+    expect(q.runtime.log.toArray()[0]?.entry).toBe('First line.\\nSecond line.')
+  })
+
+  it('writes nothing for a dialog that showed nothing', () => {
+    const q = quest()
+    q.logEntry('')
+
+    expect(q.runtime.log.length).toBe(0)
+  })
+})

@@ -61,6 +61,8 @@ export interface PlayableSession {
   press: (index: number) => void
   /** `DialogWindow.onQuota`: what the player dialled on the spinner. */
   pressQuota: (value: number) => void
+  /** What a combat dialog showed, for the quest log. Newlines already escaped. */
+  logEntry: (text: string) => void
   finishPuzzle: (name: string) => void
   closePuzzle: () => void
   activate: (name: string) => void
@@ -282,12 +284,18 @@ export function playScreen(options: PlayOptions): PlayScreen {
 
   const monsters = el('div', { class: 'vk-play__monsters' })
   const notices = el('div', { class: 'vk-play__notices', attrs: { role: 'status' } })
-  const monster = monsterDialog({ ...rich, onLog: () => {} })
+  // The dialogs escape their own newlines before handing the text over, which
+  // is how the C# writes them and therefore how a save round-trips them.
+  const logEntry = (text: string): void => {
+    session.logEntry(text)
+  }
+
+  const monster = monsterDialog({ ...rich, onLog: logEntry })
 
   const events = eventDialog(rich)
   const activation = activationDialog({
     ...rich,
-    onLog: () => {},
+    onLog: logEntry,
     onFinished: () => {
       session.activationDone()
       refresh()

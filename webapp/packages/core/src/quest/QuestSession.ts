@@ -533,6 +533,19 @@ export class QuestSession {
     return this.runtime.vars.test(button.condition)
   }
 
+  /**
+   * Records something the player read, in the log they can open.
+   *
+   * The combat dialogs each write their own text as they show it —
+   * `ActivateDialogMoM.cs:35`, `InvestigatorAttack.cs:69`,
+   * `InvestigatorEvade.cs:49`, `HorrorCheck.cs:65` — and all four escape the
+   * newlines on the way in, which is how a save carries them.
+   */
+  logEntry(text: string): void {
+    if (text.length === 0) return
+    this.runtime.log.add(new LogEntry(text))
+  }
+
   /** Records a setup problem in the quest log, as the C# logs one. */
   logWarning(message: string): void {
     this.warn(message)
