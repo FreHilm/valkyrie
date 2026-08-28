@@ -133,6 +133,8 @@ export interface StartedQuest {
   pixelsPerSquare: number
   /** The `[Quest]` section, which says how many investigators it takes. */
   quest: Quest
+  /** The packs that were loaded, which a save records so a load asks again. */
+  loadedPacks: string[]
 }
 
 /**
@@ -159,6 +161,11 @@ export async function startQuest(
     camera?: (command: CameraCommand) => void
     /** A sound the quest asked for. */
     playAudio?: (request: AudioRequest) => void
+    /**
+     * `SaveManager.Save(0)`: the autosave, which the round controller asks for
+     * at the start of every round.
+     */
+    save?: () => void
     /** Pack ids the player owns. Everything found loads when this is absent. */
     selectedPacks?: Iterable<string>
     /** The pack that loads whatever the selection says. */
@@ -216,6 +223,7 @@ export async function startQuest(
     // Without them `PuzzleSlide.generate` returns null and the event falls
     // back to drawing itself as an ordinary dialog.
     slideLayouts: slidePuzzleLayouts(),
+    ...(options.save === undefined ? {} : { save: options.save }),
     ...(options.playAudio === undefined ? {} : { playAudio: options.playAudio }),
     isQuestTransition: (name) => nested.has(normaliseQuestPath(name)),
     ...(options.camera === undefined ? {} : { camera: options.camera }),
@@ -229,5 +237,7 @@ export async function startQuest(
     gameType,
     pixelsPerSquare: content.context.tilePixelPerSquare,
     quest: quest.quest,
+    /** The packs that were loaded, which a save records so a load asks again. */
+    loadedPacks: [...content.loaded],
   }
 }

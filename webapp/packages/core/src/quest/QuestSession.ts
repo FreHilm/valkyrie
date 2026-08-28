@@ -299,6 +299,9 @@ export class QuestSession {
   start(): void {
     this.events.triggerType('EventStart')
     this.settle()
+    // `Quest.cs:770` writes the autosave once the opening event has run, so a
+    // player who closes the tab during the first round still has a game.
+    this.options.save?.()
   }
 
   /**

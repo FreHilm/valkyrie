@@ -53,6 +53,7 @@ import {
 } from '@valkyrie/core'
 import type {
   ActivationView,
+  IniData,
   AttackView,
   AudioRequest,
   CameraCommand,
@@ -78,11 +79,15 @@ import {
   questFileResolver,
   StoragePaths,
   TextureCache,
+  loadSave,
+  SaveError,
   volumeFromConfig,
+  writeSave,
 } from '@valkyrie/platform'
 import type {
   AudioContextLike,
   Crop,
+  FileSystem as VirtualFileSystem,
   PickedDirectory,
   StorageManagerLike,
 } from '@valkyrie/platform'
@@ -231,6 +236,7 @@ function menu(): void {
           title: rawText('Main menu'),
           actions: [
             { label: rawText('Play a quest'), onPress: () => void library() },
+            { label: rawText('Resume'), onPress: () => void resumeQuest() },
             { label: rawText('Import game files'), onPress: importDemo },
             { label: rawText('Load from dev server'), onPress: () => void devLoad() },
             { label: rawText('Content'), onPress: () => void contentSelectScreen() },
@@ -870,6 +876,8 @@ async function play(
    * carried rather than recomputed from the quest now loading.
    */
   questRoot: string = questPath,
+  /** A saved state to resume, instead of setting a new party up. */
+  resume?: IniData,
 ): Promise<void> {
   stage('play: loading quest', questPath)
   // Queued rather than applied: the events that aim the camera run while the
@@ -900,8 +908,20 @@ async function play(
   audio.effectVolume = volumeFromConfig(config.get('UserConfig', 'effects'))
   let sound: ((request: AudioRequest) => void) | null = null
 
-  const { session, resolveTexture, content, components, gameType, pixelsPerSquare, quest } =
-    await startQuest(fs, paths, questPath, {
+  // Declared before `startQuest`, because the round controller asks for the
+  // first autosave while the quest is still starting.
+  let autosave = (): void => {}
+
+  const {
+    session,
+    resolveTexture,
+    content,
+    components,
+    gameType,
+    pixelsPerSquare,
+    quest,
+    loadedPacks,
+  } = await startQuest(fs, paths, questPath, {
       questRoot,
       // Resolution needs the content this call is loading, so the handler is
       // filled in below and this only forwards to it.
@@ -913,6 +933,11 @@ async function play(
       camera: (command) => {
         aim(command)
       },
+      // `SaveManager.Save(0)`, which the round controller calls at the start
+      // of every round and once when the quest begins.
+      save: () => {
+        autosave()
+      },
     })
   stage('play: quest loaded')
 
@@ -921,6 +946,41 @@ async function play(
   // reading a clock inside it would make a replay depend on when it ran. It
   // moves onto the quest when saves land (T-026).
   const startedAt = Date.now()
+
+  /**
+   * `SaveManager.Save(0)`: the autosave.
+   *
+   * Fire and forget, and never awaited by the thing that asked for it — the
+   * round is not held up for a write, and a failed one costs the player the
+   * last round rather than the game they are playing.
+   */
+  const saveContext = { fs, paths: storage, currentVersion: SAVE_VERSION }
+  let saving = false
+  autosave = () => {
+    if (saving || left) return
+    saving = true
+    void (async () => {
+      try {
+        await writeSave(saveContext, AUTOSAVE_SLOT, {
+          state: session.toSaveString({
+            questPath: combine(questPath, 'quest.ini'),
+            originalPath: questRoot,
+            questName: quest.name.translate(),
+            valkyrieVersion: SAVE_VERSION,
+            packs: loadedPacks,
+            duration: Math.floor((Date.now() - startedAt) / 60000),
+            time: new Date().toISOString(),
+          }),
+          questFiles: await questFilesFor(fs, questPath),
+        })
+      } catch (error) {
+        // A save that will not write is not worth stopping a quest for.
+        console.warn('autosave', error)
+      } finally {
+        saving = false
+      }
+    })()
+  }
 
   // A scenario's own art is named relative to its directory, and is resolved
   // while the scene is being built — so the listing is taken once here rather
@@ -1001,21 +1061,28 @@ async function play(
     return blob === null ? null : URL.createObjectURL(blob)
   }
 
-  // Setup before the quest runs, in the game's order: pick the investigators,
-  // read what they start with, and only then let `EventStart` fire — which is
-  // where the scenario's own opening plays.
-  await setUpParty({
-    session,
-    content,
-    components,
-    resolveTexture,
-    quest,
-    artUrl: buildUrl,
-    present: (element) => {
-      show(panel({ class: 'vk-shell', children: [backTo(menu), element] }))
-    },
-  })
-  session.start()
+  if (resume === undefined) {
+    // Setup before the quest runs, in the game's order: pick the investigators,
+    // read what they start with, and only then let `EventStart` fire — which is
+    // where the scenario's own opening plays.
+    await setUpParty({
+      session,
+      content,
+      components,
+      resolveTexture,
+      quest,
+      artUrl: buildUrl,
+      present: (element) => {
+        show(panel({ class: 'vk-shell', children: [backTo(menu), element] }))
+      },
+    })
+    session.start()
+  } else {
+    // Resuming: the party was chosen a session ago and `EventStart` has
+    // already run. Starting again would deal the items out twice and replay
+    // the opening over a board that is already built.
+    session.restoreFrom(resume)
+  }
 
   // `outputSymbolReplace` has already turned the markers into glyphs by the
   // time anything is drawn, so the renderer needs the table read backwards to
@@ -1337,6 +1404,73 @@ function endGameDemo(): void {
     rounds: 12,
   })
   show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
+}
+
+/**
+ * Picks the autosave up where it was left.
+ *
+ * The quest is loaded from where the save says it came from, and only then is
+ * the state put back — a save records state, not content, so the scenario has
+ * to exist before there is anything to restore onto.
+ */
+async function resumeQuest(): Promise<void> {
+  const fs = new OpfsFileSystem(navigator.storage as unknown as StorageManagerLike)
+  const storage = new StoragePaths(
+    { appData: '/appdata', content: '/content', temp: '/tmp' },
+    'MoM',
+  )
+  const context = { fs, paths: storage, currentVersion: SAVE_VERSION }
+
+  const status = el('p', { class: 'vk-shell__status', attrs: { 'aria-live': 'polite' } })
+  show(panel({ class: 'vk-shell', children: [backTo(menu), status] }))
+
+  try {
+    const save = await loadSave(context, AUTOSAVE_SLOT)
+    const paths = libraryPaths(storage)
+    await play(fs, paths, save.questPath, save.questPath, save.data)
+  } catch (error) {
+    status.textContent =
+      error instanceof SaveError && error.rejection === 'missing'
+        ? 'There is no saved game yet. Play a quest and it will save itself.'
+        : `That save could not be opened: ${String(error)}`
+  }
+}
+
+/**
+ * The version a save records, and the one saves are checked against.
+ *
+ * `__VALKYRIE_VERSION__` is a display string — "dev" in a dev build — and the
+ * `valkyrie=` key is a compatibility gate that `checkSaveVersion` parses as a
+ * version. It tracks the Unity project's `bundleVersion` so a save says which
+ * Valkyrie it belongs to, even though the two do not interoperate.
+ */
+const SAVE_VERSION = '3.0.4'
+
+/** Slot 0 is the autosave, which every other slot is a deliberate copy of. */
+const AUTOSAVE_SLOT = 0
+
+/**
+ * The scenario's own files, carried into the save.
+ *
+ * `SaveManager.SaveWithScreen` copies the quest content in so a save opens
+ * even after the quest is edited or deleted. Paths are stored relative to the
+ * quest, which is where a load extracts them back to.
+ */
+async function questFilesFor(
+  fs: VirtualFileSystem,
+  questPath: string,
+): Promise<Map<string, Uint8Array>> {
+  const files = new Map<string, Uint8Array>()
+  for (const entry of await fs.list(questPath, { recursive: true })) {
+    if (entry.kind === 'directory') continue
+    const relative = entry.path.slice(questPath.length).replace(/^\//, '')
+    // The archive it came in is not worth carrying into the one it goes into.
+    if (relative.startsWith('.')) continue
+    // Under `quest/`, which is where `resolveQuestPath` points a load: the
+    // C# lays its archives out the same way.
+    files.set(`quest/${relative}`, await fs.readBytes(entry.path))
+  }
+  return files
 }
 
 /** `GameType.BaseContentPackId()`, which is loaded whatever is selected. */
