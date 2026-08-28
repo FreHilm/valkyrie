@@ -41,6 +41,7 @@ import {
   ActivationInstance,
   attackTypes,
   DEFAULT_LANGUAGE,
+  HeroData,
   ItemData,
   LogEntry,
   MoMPhase,
@@ -915,6 +916,12 @@ async function play(
     })
   stage('play: quest loaded')
 
+  // `Quest.start_time`, which the C# keeps on the quest so a save can carry the
+  // running total. Kept here instead, because the session is deterministic and
+  // reading a clock inside it would make a replay depend on when it ran. It
+  // moves onto the quest when saves land (T-026).
+  const startedAt = Date.now()
+
   // A scenario's own art is named relative to its directory, and is resolved
   // while the scene is being built — so the listing is taken once here rather
   // than probed per frame. `Game.cs:210` reads the languages from the same
@@ -1060,6 +1067,9 @@ async function play(
           activated: instance.activated,
         }
       }),
+    onEnded: () => {
+      showEndOfQuest()
+    },
     onChangeQuest: (path) => {
       // The board and everything on it belongs to the scenario being left;
       // the campaign variables it keeps are `changeQuest`'s business.
@@ -1187,6 +1197,35 @@ async function play(
     screen.camera(command)
   }
 
+  /**
+   * The quest is over, so the board comes down and the summary goes up.
+   *
+   * `EventManager.cs:466` sends a scenario that is not a downloaded package
+   * straight to the main menu instead, so an author testing one is not asked
+   * to rate it — that rating went to a stats endpoint. DEVIATION: this port
+   * sends nothing anywhere, so there is nothing to spare a test scenario from
+   * and every quest gets its summary.
+   */
+  function showEndOfQuest(): void {
+    // No teardown here: `show` runs the play screen's own `onLeave` first,
+    // which is what disposes the audio and the board. Doing it twice closes
+    // an already closed `AudioContext`, which throws.
+    const heroes = session.runtime.heroes
+      .map((hero) => hero.heroName)
+      .filter((name): name is string => name !== null)
+      .map((name) => content.tryGet(HeroData, name)?.name.translate() ?? name)
+
+    const summary = endGame({ onMenu: menu })
+    summary.show({
+      questName: quest.name.translate(),
+      party: heroes,
+      events: session.events.history,
+      // Whole minutes, as the C# reports them.
+      minutes: Math.floor((Date.now() - startedAt) / 60000),
+      rounds: Math.round(session.runtime.vars.getValue('#round')),
+    })
+    show(panel({ class: 'vk-shell', children: [backTo(menu), summary.element] }))
+  }
   show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
   onLeave(() => {
     // Leaving on purpose is not the tab dying mid-load, so the breadcrumb goes

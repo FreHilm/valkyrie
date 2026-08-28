@@ -475,3 +475,48 @@ describe('playScreen phase menus', () => {
     expect(bar(screen)).toEqual([])
   })
 })
+
+describe('playScreen end of quest', () => {
+  it('hands the ending over, because the summary is not a board', () => {
+    // `EventManager.cs:460` sets `questHasEnded` and builds a screen needing
+    // the party's names and how long they played — none of which this screen
+    // has. Without the handover the board simply stops being drawn.
+    const onEnded = vi.fn()
+    const { session: s } = session({ kind: 'ended' })
+    const screen = playScreen({ session: s, sources: SOURCES, onEnded })
+    document.body.append(screen.element)
+
+    expect(onEnded).toHaveBeenCalledTimes(1)
+  })
+
+  it('hands it over once, however often the screen redraws', () => {
+    // Anything that touches the board refreshes, and rebuilding the summary
+    // underneath the player would throw away what they were reading.
+    const onEnded = vi.fn()
+    const { session: s } = session({ kind: 'ended' })
+    const screen = playScreen({ session: s, sources: SOURCES, onEnded })
+    document.body.append(screen.element)
+    screen.refresh()
+    screen.refresh()
+
+    expect(onEnded).toHaveBeenCalledTimes(1)
+  })
+
+  it('takes the board furniture away with it', () => {
+    const { session: s } = session(
+      { kind: 'ended' },
+      {
+        runtime: {
+          boardItems: () => [{ name: 'TileFoyer', component: { type: 'Tile' } }],
+          monsters: [],
+          log: { toArray: () => [] },
+        },
+      },
+    )
+    const screen = playScreen({ session: s, sources: SOURCES, onEnded: vi.fn() })
+    document.body.append(screen.element)
+
+    expect(screen.element.querySelectorAll('.vk-play__menus button')).toHaveLength(0)
+    expect(screen.element.querySelector('.vk-play__controls')?.textContent).toBe('')
+  })
+})

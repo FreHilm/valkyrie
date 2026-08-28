@@ -140,6 +140,12 @@ export interface PlayOptions {
    */
   onChangeQuest?: (path: string) => void
   /**
+   * The quest is over. `EventManager.cs:460` sets `questHasEnded` and leaves
+   * the board behind for a screen this one cannot build, because the summary
+   * needs the party's names and how long they played.
+   */
+  onEnded?: () => void
+  /**
    * Content the scenario needs and the player has not got.
    *
    * Shown over the board rather than logged: the symptom is a board with
@@ -280,6 +286,9 @@ export function playScreen(options: PlayOptions): PlayScreen {
 
   /** Which of the three phase-bar menus is open, if any. */
   let openMenu: 'items' | 'set' | 'log' | null = null
+
+  /** Whether the quest's end has already been handed over. */
+  let ended = false
 
   function closeMenu(): void {
     openMenu = null
@@ -604,6 +613,12 @@ export function playScreen(options: PlayOptions): PlayScreen {
 
     if (current.kind === 'ended') {
       selected = null
+      // Once only: `refresh` runs again for anything that touches the board,
+      // and the end screen must not be rebuilt underneath the player.
+      if (!ended) {
+        ended = true
+        options.onEnded?.()
+      }
       return
     }
 
