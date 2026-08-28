@@ -1065,6 +1065,16 @@ body {
   font-size: var(--vk-text-medium);
 }
 
+/* `MenuButton`: top right, clear of the phase bar and the monster strip. */
+.vk-play__menu-button {
+  position: absolute;
+  top: calc(var(--u) * 0.5);
+  right: calc(var(--u) * 0.5);
+}
+.vk-game-menu__item {
+  width: 100%;
+}
+
 /* Save slots: four rows that stay in the same places, so a player can keep
    track of which is which by position as much as by name. */
 .vk-saves__list {

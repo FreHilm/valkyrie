@@ -956,6 +956,16 @@ async function play(
    * last round rather than the game they are playing.
    */
   const saveContext = { fs, paths: storage, currentVersion: SAVE_VERSION }
+  /** What every save of this quest records, autosave or chosen slot alike. */
+  const saveOptions = () => ({
+    questPath: combine(questPath, 'quest.ini'),
+    originalPath: questRoot,
+    questName: quest.name.translate(),
+    valkyrieVersion: SAVE_VERSION,
+    packs: loadedPacks,
+    duration: Math.floor((Date.now() - startedAt) / 60000),
+    time: new Date().toISOString(),
+  })
   let saving = false
   autosave = () => {
     if (saving || left) return
@@ -963,15 +973,7 @@ async function play(
     void (async () => {
       try {
         await writeSave(saveContext, AUTOSAVE_SLOT, {
-          state: session.toSaveString({
-            questPath: combine(questPath, 'quest.ini'),
-            originalPath: questRoot,
-            questName: quest.name.translate(),
-            valkyrieVersion: SAVE_VERSION,
-            packs: loadedPacks,
-            duration: Math.floor((Date.now() - startedAt) / 60000),
-            time: new Date().toISOString(),
-          }),
+          state: session.toSaveString(saveOptions()),
           questFiles: await questFilesFor(fs, questPath),
         })
       } catch (error) {
@@ -1208,6 +1210,21 @@ async function play(
           session.runtime.vars.setValue(name, value)
         },
       },
+      game: {
+        onUndo: () => {
+          session.undo()
+        },
+        canUndo: () => session.canUndo,
+        onSave: () => {
+          void saveToSlot()
+        },
+        // `GameMenu.Quit` writes the autosave on the way out, so leaving is
+        // not the same as losing the game.
+        onMainMenu: () => {
+          autosave()
+          menu()
+        },
+      },
       set: {
         view: () => ({
           fire: session.runtime.vars.getValue('$fire') > 0,
@@ -1300,7 +1317,44 @@ async function play(
     })
     show(panel({ class: 'vk-shell', children: [backTo(menu), summary.element] }))
   }
-  show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
+  /** `GameMenu.Save`: the save slots, in the direction that writes. */
+  const backToBoard = (): void => {
+    show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
+  }
+
+  async function saveToSlot(): Promise<void> {
+    const slots = saveSelect({
+      mode: 'save',
+      onBack: backToBoard,
+      onSelect: (slot) => {
+        void (async () => {
+          try {
+            await writeSave(saveContext, slot, {
+              state: session.toSaveString(saveOptions()),
+              questFiles: await questFilesFor(fs, questPath),
+            })
+          } catch (error) {
+            console.warn('save', error)
+          }
+          backToBoard()
+        })()
+      },
+    })
+    const metadata = await listSaves(saveContext)
+    slots.show(
+      metadata.map((entry) => ({
+        slot: entry.slot,
+        save:
+          entry.questName.length === 0 && entry.saveTime === null
+            ? null
+            : { questName: entry.questName, time: readableTime(entry.saveTime) },
+        rejection: rejectionText(entry.rejection),
+      })),
+    )
+    show(panel({ class: 'vk-shell', children: [backTo(menu), slots.element] }))
+  }
+
+  backToBoard()
   onLeave(() => {
     // Leaving on purpose is not the tab dying mid-load, so the breadcrumb goes
     // with it — otherwise the menu reports a failure that never happened.

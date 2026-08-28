@@ -619,3 +619,82 @@ describe('playScreen combat log', () => {
     expect(calls).toContain('log:One.\\nTwo.')
   })
 })
+
+describe('playScreen game menu', () => {
+  const gameMenuOptions = (over: Record<string, unknown> = {}) => ({
+    onUndo: vi.fn(),
+    canUndo: () => true,
+    onSave: vi.fn(),
+    onMainMenu: vi.fn(),
+    ...over,
+  })
+
+  function withMenu(over: Record<string, unknown> = {}, view = { kind: 'board' }) {
+    const { session: s } = session(view, {
+      runtime: {
+        boardItems: () => [{ name: 'TileFoyer', component: { type: 'Tile' } }],
+        monsters: [],
+        log: { toArray: () => [] },
+      },
+    })
+    const game = gameMenuOptions(over)
+    const screen = playScreen({ session: s, sources: SOURCES, menus: { game } })
+    document.body.append(screen.element)
+    return { screen, game }
+  }
+
+  const openMenu = (screen: { element: HTMLElement }) =>
+    screen.element.querySelector<HTMLButtonElement>('.vk-play__menu-button button')?.click()
+
+  it('offers the menu from the top right', () => {
+    // `MenuButton` puts it there, clear of the phase bar and monster strip.
+    const { screen } = withMenu()
+
+    expect(
+      screen.element.querySelector('.vk-play__menu-button button')?.textContent,
+    ).toBe('Menu')
+  })
+
+  it('opens on the four things it offers', () => {
+    const { screen } = withMenu()
+    openMenu(screen)
+
+    expect(
+      [...screen.element.querySelectorAll('.vk-play__menu button')].map((b) => b.textContent),
+    ).toEqual(['Undo', 'Save', 'Main menu', 'Cancel'])
+  })
+
+  it('greys out undo when there is nothing to step back to', () => {
+    const { screen } = withMenu({ canUndo: () => false })
+    openMenu(screen)
+
+    const undo = [...screen.element.querySelectorAll<HTMLButtonElement>('.vk-play__menu button')]
+      .find((b) => b.textContent === 'Undo')
+    expect(undo?.disabled).toBe(true)
+  })
+
+  it('steps back and closes', () => {
+    const { screen, game } = withMenu()
+    openMenu(screen)
+    ;[...screen.element.querySelectorAll<HTMLButtonElement>('.vk-play__menu button')]
+      .find((b) => b.textContent === 'Undo')
+      ?.click()
+
+    expect(game.onUndo).toHaveBeenCalled()
+    expect(screen.element.querySelector('.vk-play__menu')?.textContent).toBe('')
+  })
+
+  it('stays reachable while a dialog is up', () => {
+    // It is how a player saves and how they leave, and neither should wait for
+    // an event to be answered.
+    const { screen } = withMenu({}, { kind: 'event', text: 'A door.', buttons: [] })
+
+    expect(screen.element.querySelector('.vk-play__menu-button button')).not.toBeNull()
+  })
+
+  it('goes away once the quest has ended', () => {
+    const { screen } = withMenu({}, { kind: 'ended' })
+
+    expect(screen.element.querySelector('.vk-play__menu-button button')).toBeNull()
+  })
+})

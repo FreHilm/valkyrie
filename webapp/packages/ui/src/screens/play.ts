@@ -13,6 +13,7 @@
 
 import { activationDialog } from './activationDialog.js'
 import { eventDialog } from './eventDialog.js'
+import { gameMenu } from './gameMenu.js'
 import { inventory } from './inventory.js'
 import type { InventoryItem } from './inventory.js'
 import { monsterDialog } from './monsterDialog.js'
@@ -87,6 +88,12 @@ export interface PlayStrings {
   items: Text
   set: Text
   log: Text
+  /** `MenuButton`, top right, and the entries `GameMenu` offers. */
+  menu: Text
+  undo: Text
+  save: Text
+  mainMenu: Text
+  cancel: Text
   /** `SetWindow`'s two switches, and the `CLOSE` every menu shares. */
   setFire: Text
   clearFire: Text
@@ -103,6 +110,11 @@ const DEFAULT_STRINGS: PlayStrings = {
   items: rawText('Items'),
   set: rawText('Set'),
   log: rawText('Log'),
+  menu: rawText('Menu'),
+  undo: rawText('Undo'),
+  save: rawText('Save'),
+  mainMenu: rawText('Main menu'),
+  cancel: rawText('Cancel'),
   setFire: rawText('Set Fire'),
   clearFire: rawText('Clear Fire'),
   eliminated: rawText('Investigator Eliminated'),
@@ -193,6 +205,16 @@ export interface PlayOptions {
       /** `Game.testMode`: whether the developer view starts open. */
       developer?: boolean
     }
+    /** `MenuButton`, which opens `GameMenu`. */
+    game?: {
+      /** `Quest.Undo`. */
+      onUndo: () => void
+      canUndo: () => boolean
+      /** Opens the save slots in save mode. */
+      onSave: () => void
+      /** `GameMenu.Quit`: autosaves, then leaves. */
+      onMainMenu: () => void
+    }
     /** `Set`, which opens `SetWindow`. */
     set?: {
       view: () => SetWindowView
@@ -238,6 +260,9 @@ export function playScreen(options: PlayOptions): PlayScreen {
   // that is still showing behind it.
   const menuBar = el('div', { class: 'vk-play__menus', attrs: { role: 'group' } })
   const menuLayer = el('div', { class: 'vk-play__menu' })
+  // `MenuButton` sits top right, clear of the phase bar at the bottom left and
+  // the monster strip down the right edge.
+  const menuButton = el('div', { class: 'vk-play__menu-button' })
   const surface = el('div', { class: 'vk-play__board' })
 
   const view = board({
@@ -303,7 +328,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
   })
 
   /** Which of the three phase-bar menus is open, if any. */
-  let openMenu: 'items' | 'set' | 'log' | null = null
+  let openMenu: 'items' | 'set' | 'log' | 'game' | null = null
 
   /** Whether the quest's end has already been handed over. */
   let ended = false
@@ -357,6 +382,30 @@ export function playScreen(options: PlayOptions): PlayScreen {
     },
   })
 
+  const game = gameMenu({
+    onUndo: () => {
+      openMenu = null
+      options.menus?.game?.onUndo()
+      refresh()
+    },
+    onSave: () => {
+      openMenu = null
+      options.menus?.game?.onSave()
+    },
+    onMainMenu: () => {
+      openMenu = null
+      options.menus?.game?.onMainMenu()
+    },
+    onCancel: closeMenu,
+    strings: {
+      title: strings.menu,
+      undo: strings.undo,
+      save: strings.save,
+      mainMenu: strings.mainMenu,
+      cancel: strings.cancel,
+    },
+  })
+
   const questUi = questUiLayer({
     ...rich,
     onSelect: (name) => {
@@ -371,7 +420,17 @@ export function playScreen(options: PlayOptions): PlayScreen {
   // dialog covers it rather than the other way round.
   const element = panel({
     class: 'vk-play',
-    children: [surface, questUi.element, monsters, notices, overlay, menuLayer, controls, menuBar],
+    children: [
+      surface,
+      questUi.element,
+      monsters,
+      notices,
+      overlay,
+      menuLayer,
+      controls,
+      menuBar,
+      menuButton,
+    ],
   })
 
   /** Art already requested, so a redraw does not re-request it. */
@@ -478,6 +537,19 @@ export function playScreen(options: PlayOptions): PlayScreen {
    */
   function drawMenuBar(kind: string): void {
     clear(menuBar)
+    clear(menuButton)
+    // The menu is always reachable, dialog or not: it is how a player saves
+    // and how they leave, and neither should wait for an event to be answered.
+    if (options.menus?.game !== undefined) {
+      menuButton.append(
+        button(strings.menu, {
+          onPress: () => {
+            openMenu = 'game'
+            refresh()
+          },
+        }),
+      )
+    }
     // `if (!firstTileDisplayed) return`: the bar waits for the board to have
     // something on it, so the opening cutscene is not framed by chrome. The
     // port reads that off the board rather than keeping the flag.
@@ -537,6 +609,9 @@ export function playScreen(options: PlayOptions): PlayScreen {
     } else if (openMenu === 'set' && menus?.set !== undefined) {
       set.show(menus.set.view())
       menuLayer.append(set.element)
+    } else if (openMenu === 'game' && menus?.game !== undefined) {
+      game.show({ canUndo: menus.game.canUndo() })
+      menuLayer.append(game.element)
     } else {
       openMenu = null
     }
@@ -553,6 +628,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
     // being left, and the next one is not loaded yet.
     if (current.kind === 'changeQuest') {
       clear(menuBar)
+      clear(menuButton)
       clear(menuLayer)
       if (current.path !== undefined) options.onChangeQuest?.(current.path)
       return
@@ -562,6 +638,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
     // outlives the dialogs, and the menu is drawn last so it sits over them.
     if (current.kind === 'ended') {
       clear(menuBar)
+      clear(menuButton)
       clear(menuLayer)
       openMenu = null
     } else {
