@@ -23,8 +23,14 @@ export interface RichStyle {
 
 export type RichSpan =
   | ({ kind: 'text'; text: string } & RichStyle)
-  /** A game symbol, named as the marker that produced it: `will`, `action`. */
-  | ({ kind: 'symbol'; symbol: string } & RichStyle)
+  /**
+   * A game symbol, named as the marker that produced it: `will`, `action`.
+   *
+   * `character` is the codepoint the name was recognised from — a private-use
+   * one such as U+F208, which the game font draws as the icon. Carried so a
+   * renderer with that font can show the glyph rather than the name.
+   */
+  | ({ kind: 'symbol'; symbol: string; character: string } & RichStyle)
 
 /**
  * The tags Unity's legacy `Text` honours and the shipped content uses.
@@ -94,7 +100,7 @@ export function parseRichText(
     const symbol = symbolOf(character)
     if (symbol !== null) {
       flush()
-      spans.push({ kind: 'symbol', symbol, ...style() })
+      spans.push({ kind: 'symbol', symbol, character, ...style() })
       at += character.length
       continue
     }

@@ -289,6 +289,23 @@ body {
   opacity: 0.92;
 }
 
+/*
+ * The glyph itself, when a font carrying the private-use range is loaded and
+ * the caller has said so. No chip: the icon is already one token, and a border
+ * round it would read as a second.
+ */
+.vk-symbol--glyph {
+  padding: 0;
+  margin: 0 0.1em;
+  border: 0;
+  border-radius: 0;
+  font-size: 1.05em;
+  font-weight: 400;
+  font-variant: normal;
+  letter-spacing: normal;
+  opacity: 1;
+}
+
 /* ---- starting items ---- */
 .vk-starting {
   max-width: calc(var(--u) * 32);

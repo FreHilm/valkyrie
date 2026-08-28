@@ -317,3 +317,55 @@ describe('eventDialog quota', () => {
     ])
   })
 })
+
+describe('eventDialog symbols in button labels', () => {
+  // An action-costing button is written "{action} Search" and reaches the
+  // screen as a private-use codepoint — U+F208. Rendered as plain text that
+  // draws a blank box, which is exactly what a font the browser does not have
+  // looks like, and tells the player nothing.
+  const ACTION = ''
+  const rich = { symbolOf: (c: string) => (c === ACTION ? 'action' : null) }
+
+  it('turns a symbol in a label into a symbol, not a blank box', () => {
+    const dialog = eventDialog({ rich })
+    dialog.show({
+      text: 'The desk is covered in clutter.',
+      buttons: [{ text: `${ACTION} Search`, onPress: vi.fn() }],
+    })
+
+    const symbol = dialog.element.querySelector('.vk-symbol--action')
+    expect(symbol).not.toBeNull()
+    expect(symbol?.getAttribute('aria-label')).toBe('Action')
+    expect(dialog.element.querySelector('button')?.textContent).toContain('Search')
+  })
+
+  it('leaves a button that costs nothing alone', () => {
+    const dialog = eventDialog({ rich })
+    dialog.show({ text: 'A choice.', buttons: [{ text: 'Cancel', onPress: vi.fn() }] })
+
+    expect(dialog.element.querySelector('.vk-symbol')).toBeNull()
+    expect(dialog.element.querySelector('button')?.textContent).toBe('Cancel')
+  })
+
+  it('draws the glyph itself when the game font is there', () => {
+    const dialog = eventDialog({ rich: { ...rich, glyphs: true } })
+    dialog.show({
+      text: 'A choice.',
+      buttons: [{ text: `${ACTION} Search`, onPress: vi.fn() }],
+    })
+
+    const symbol = dialog.element.querySelector('.vk-symbol--action')
+    expect(symbol?.textContent).toBe(ACTION)
+    expect(symbol?.getAttribute('aria-label')).toBe('Action')
+  })
+
+  it('names it instead when the font is not', () => {
+    const dialog = eventDialog({ rich })
+    dialog.show({
+      text: 'A choice.',
+      buttons: [{ text: `${ACTION} Search`, onPress: vi.fn() }],
+    })
+
+    expect(dialog.element.querySelector('.vk-symbol--action')?.textContent).toBe('Action')
+  })
+})

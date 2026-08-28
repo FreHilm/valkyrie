@@ -23,6 +23,16 @@ export interface RichTextOptions {
   symbolOf?: (character: string) => string | null
   /** How a symbol is spelled for the reader. Defaults to the marker name. */
   labelOf?: (symbol: string) => string
+  /**
+   * Whether the game font carrying the symbol glyphs is available.
+   *
+   * The markers become private-use codepoints — `{action}` is U+F208 — which
+   * only `MADGaramondPro` draws. With it, the glyph is what a player expects
+   * to see. Without it, the codepoint renders as a blank box, so the name is
+   * shown in its place instead. The caller decides, because only the
+   * application knows what it managed to load.
+   */
+  glyphs?: boolean
 }
 
 /** Title case, so `action` reads as `Action` beside the sentence it sits in. */
@@ -44,9 +54,16 @@ export function renderRichText(input: string, options: RichTextOptions = {}): Do
     let node: Node
     if (span.kind === 'symbol') {
       const name = label(span.symbol)
+      // The glyph when the game font is there to draw it, and the name when
+      // it is not — a private-use codepoint with no font behind it is a blank
+      // box, which tells a player nothing. Either way the accessible label is
+      // the name, so a reader hears "Action" whichever a player sees.
+      const drawGlyph = options.glyphs === true
       node = el('span', {
-        class: `vk-symbol vk-symbol--${span.symbol}`,
-        text: name,
+        class: drawGlyph
+          ? `vk-symbol vk-symbol--glyph vk-symbol--${span.symbol}`
+          : `vk-symbol vk-symbol--${span.symbol}`,
+        text: drawGlyph ? span.character : name,
         // Read as one thing rather than spelled out beside the sentence.
         attrs: { role: 'img', 'aria-label': name },
       })

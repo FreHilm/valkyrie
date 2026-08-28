@@ -13,6 +13,7 @@ import { button, label, panel } from '../components.js'
 import { clear, el } from '../dom.js'
 import { rawText } from '../text.js'
 import type { Text } from '../text.js'
+import { setRichText } from '../richText.js'
 import type { RichTextOptions } from '../richText.js'
 
 export interface EventButton {
@@ -95,17 +96,21 @@ export function eventDialog(options: { rich?: RichTextOptions } = {}): EventDial
       clear(actions)
       const quota = view.quota
       if (quota !== undefined) {
-        drawQuota(actions, quota, view.buttons[0])
+        drawQuota(actions, quota, view.buttons[0], options.rich ?? {})
         return
       }
       for (const action of view.buttons) {
-        actions.append(
-          button(rawText(action.text), {
-            onPress: action.onPress,
-            variant: 'primary',
-            ...(action.disabled === true ? { disabled: true } : {}),
-          }),
-        )
+        const control = button(rawText(action.text), {
+          onPress: action.onPress,
+          variant: 'primary',
+          ...(action.disabled === true ? { disabled: true } : {}),
+        })
+        // A label carries symbols too: an action-costing button is written
+        // "{action} Search" and reaches here as a private-use codepoint. Left
+        // as plain text it draws a blank box, which is what a font the browser
+        // does not have looks like.
+        setRichText(control, action.text, options.rich ?? {})
+        actions.append(control)
       }
     },
     clear: () => {
@@ -123,7 +128,19 @@ export function eventDialog(options: { rich?: RichTextOptions } = {}): EventDial
  * are disabled rather than clamped silently — the C# rebuilds the whole
  * window on each press to achieve the same thing.
  */
-function drawQuota(into: HTMLElement, quota: EventQuota, action: EventButton | undefined): void {
+/** A button whose label may carry symbols, which plain text would blank out. */
+function richButton(text: string, onPress: () => void, rich: RichTextOptions = {}): HTMLElement {
+  const control = button(rawText(text), { onPress, variant: 'primary' })
+  setRichText(control, text, rich)
+  return control
+}
+
+function drawQuota(
+  into: HTMLElement,
+  quota: EventQuota,
+  action: EventButton | undefined,
+  rich: RichTextOptions,
+): void {
   let value = Math.max(0, Math.min(quota.max, quota.value))
 
   const render = (): void => {
@@ -155,12 +172,13 @@ function drawQuota(into: HTMLElement, quota: EventQuota, action: EventButton | u
 
     if (action !== undefined) {
       into.append(
-        button(rawText(action.text), {
-          onPress: () => {
+        richButton(
+          action.text,
+          () => {
             quota.onSubmit(value)
           },
-          variant: 'primary',
-        }),
+          rich,
+        ),
       )
     }
   }

@@ -78,14 +78,14 @@ describe('parseRichText', () => {
 
     expect(spans).toEqual([
       { kind: 'text', text: 'spend 1 ', bold: false, italic: false },
-      { kind: 'symbol', symbol: 'action', bold: false, italic: false },
+      { kind: 'symbol', symbol: 'action', character: ACTION, bold: false, italic: false },
       { kind: 'text', text: ' now', bold: false, italic: false },
     ])
   })
 
   it('carries the style in force onto a symbol', () => {
     expect(parseRichText(`<i>${WILL}</i>`, symbolOf)).toEqual([
-      { kind: 'symbol', symbol: 'will', bold: false, italic: true },
+      { kind: 'symbol', symbol: 'will', character: WILL, bold: false, italic: true },
     ])
   })
 
