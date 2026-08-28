@@ -58,6 +58,19 @@ export interface SessionButton {
   disabled: boolean
 }
 
+/**
+ * An event that asks the player for a number, `DialogWindow.CreateQuotaWindow`.
+ *
+ * Not "press it N times": the dialog is a spinner the player dials, and what
+ * they dial is either written into a variable or added to a running total.
+ */
+export interface QuotaRequest {
+  /** What the spinner starts on. A `quotaVar` event starts on its value. */
+  value: number
+  /** `quotaInc` stops here. */
+  max: number
+}
+
 /** A puzzle in progress, with the state the screens read. */
 export interface ActivePuzzle {
   name: string
@@ -68,7 +81,14 @@ export interface ActivePuzzle {
 }
 
 export type SessionView =
-  | { kind: 'event'; name: string; text: string; buttons: SessionButton[] }
+  | {
+      kind: 'event'
+      name: string
+      text: string
+      buttons: SessionButton[]
+      /** Present when the event asks for a number instead of a choice. */
+      quota?: QuotaRequest
+    }
   | { kind: 'puzzle'; puzzle: ActivePuzzle }
   | { kind: 'activation'; monster: MonsterInstance; activation: ActivationInstance }
   | { kind: 'phase'; phase: MoMPhase }
@@ -258,11 +278,17 @@ export class QuestSession {
       // (`EventManager.cs:309`); its buttons only appear once it is solved.
       if (puzzle !== null) return { kind: 'puzzle', puzzle }
 
+      const quota = this.quotaFor(current.sectionName)
+      const buttons = this.buttons(current.sectionName)
       return {
         kind: 'event',
         name: current.sectionName,
         text: this.eventText(current.sectionName),
-        buttons: this.buttons(current.sectionName),
+        // `CreateQuotaWindow` draws `GetButtons()[0]` and nothing else,
+        // whatever the event declares — the second button is the outcome for
+        // a total that has not got there yet, not something to press.
+        buttons: quota === null ? buttons : buttons.slice(0, 1),
+        ...(quota === null ? {} : { quota }),
       }
     }
 
@@ -364,6 +390,62 @@ export class QuestSession {
   }
 
   /** The player pressed a button. */
+  /** `quotaInc` greys out at ten, so that is as high as the spinner goes. */
+  private static readonly QUOTA_MAX = 10
+
+  /**
+   * The spinner an event asks for, or null when it asks for a choice.
+   *
+   * `DialogWindow.cs:48`: either a numeric `quota` or a `quotaVar` naming the
+   * variable to read and write. A `quotaVar` dialog opens on that variable's
+   * current value; a numeric one opens on nothing.
+   */
+  private quotaFor(name: string): QuotaRequest | null {
+    const component = this.options.components.get(name)
+    if (!(component instanceof QuestEvent)) return null
+    if (component.quota <= 0 && component.quotaVar.length === 0) return null
+
+    const value =
+      component.quotaVar.length > 0 ? Math.round(this.runtime.vars.getValue(component.quotaVar)) : 0
+    return { value, max: QuestSession.QUOTA_MAX }
+  }
+
+  /**
+   * The player dialled a number and pressed the button, `DialogWindow.onQuota`.
+   *
+   * A `quotaVar` event writes it to the variable and takes its first button.
+   * A numeric one adds it to the event's running total and takes the first
+   * button only once the total has got there — otherwise the second, which is
+   * where a scenario writes "you found nothing this time".
+   */
+  pressQuota(value: number): void {
+    const current = this.events.current
+    if (current === null) return
+    const component = this.options.components.get(current.sectionName)
+    if (!(component instanceof QuestEvent)) return
+
+    const dialled = Math.round(value)
+
+    if (component.quotaVar.length > 0) {
+      this.runtime.vars.setValue(component.quotaVar, dialled)
+      this.press(0)
+      return
+    }
+
+    const name = current.sectionName
+    const total = (this.runtime.eventQuota.get(name) ?? 0) + dialled
+    this.runtime.eventQuota.set(name, total)
+
+    if (total >= component.quota) {
+      // Dropped rather than left at the total, so a scenario that runs the
+      // same event again starts it over.
+      this.runtime.eventQuota.delete(name)
+      this.press(0)
+      return
+    }
+    this.press(1)
+  }
+
   press(index: number): void {
     this.pending = null
     // `DialogWindow.onButton` writes the text the player just read into the

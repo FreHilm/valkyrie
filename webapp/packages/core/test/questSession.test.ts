@@ -705,3 +705,112 @@ event1=
     expect(quest.runtime.log.toArray().map((e) => e.entry)).toEqual(['You arrive.'])
   })
 })
+
+/**
+ * Event quota, `DialogWindow.CreateQuotaWindow` and `onQuota`.
+ *
+ * Not "press it N times": the dialog is a spinner from 0 to 10 that the player
+ * dials, and what they dial is either written into a variable or added to a
+ * running total the event keeps. Six of the seven Mansions scenarios in the
+ * library use it, and without it those events completed on the first press.
+ */
+describe('QuestSession quota', () => {
+  const SEARCH = `[EventSearch]
+trigger=EventStart
+quota=3
+buttons=2
+event1=EventFound
+event2=
+[EventFound]
+buttons=1
+event1=
+`
+
+  it('offers a spinner instead of a choice', () => {
+    const quest = session(SEARCH)
+    quest.start()
+
+    const view = quest.view()
+    expect(view.kind).toBe('event')
+    expect(view.kind === 'event' ? view.quota : null).toEqual({ value: 0, max: 10 })
+  })
+
+  it('draws only the first button, whatever the event declares', () => {
+    // `CreateQuotaWindow` uses `GetButtons()[0]` and nothing else — the second
+    // is the outcome for a total that has not got there, not a thing to press.
+    const quest = session(SEARCH)
+    quest.start()
+
+    const view = quest.view()
+    expect(view.kind === 'event' ? view.buttons.length : null).toBe(1)
+  })
+
+  it('takes the second button until the total reaches the quota', () => {
+    const quest = session(SEARCH)
+    quest.start()
+
+    quest.pressQuota(1)
+    expect(quest.runtime.eventQuota.get('EventSearch')).toBe(1)
+    // Not there yet, so the event took its second button and ended.
+    expect(quest.view().kind).toBe('board')
+  })
+
+  it('takes the first button once the total gets there, and forgets the tally', () => {
+    const quest = session(SEARCH)
+    quest.start()
+
+    quest.pressQuota(2)
+    expect(quest.runtime.eventQuota.get('EventSearch')).toBe(2)
+
+    // The event runs again; two more takes it past three.
+    quest.activate('EventSearch')
+    quest.pressQuota(2)
+
+    // Dropped rather than left at the total, so running it again starts over.
+    expect(quest.runtime.eventQuota.has('EventSearch')).toBe(false)
+    expect(quest.events.history).toContain('EventSearch')
+  })
+
+  it('writes what was dialled into the variable a quotaVar names', () => {
+    const quest = session(`[EventClues]
+trigger=EventStart
+quota=$clues
+buttons=1
+event1=
+`)
+    quest.start()
+    quest.pressQuota(4)
+
+    expect(quest.runtime.vars.getValue('$clues')).toBe(4)
+  })
+
+  it('opens a quotaVar spinner on the value the variable already holds', () => {
+    const quest = session(`[EventClues]
+trigger=EventStart
+quota=$clues
+buttons=1
+event1=
+`)
+    quest.runtime.vars.setValue('$clues', 3)
+    quest.start()
+
+    expect(quest.view().kind === 'event' ? quest.view().quota : null).toEqual({
+      value: 3,
+      max: 10,
+    })
+  })
+
+  it('leaves an ordinary event alone', () => {
+    const quest = session(`[EventPlain]
+trigger=EventStart
+buttons=2
+event1=
+event2=
+`)
+    quest.start()
+
+    const view = quest.view()
+    expect(view.kind === 'event' ? view.quota : 'absent').toBeUndefined()
+    expect(view.kind === 'event' ? view.buttons.length : null).toBe(2)
+  })
+})

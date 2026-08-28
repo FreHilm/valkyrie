@@ -1047,6 +1047,20 @@ body {
   box-shadow: 0 calc(var(--u) * 0.2) calc(var(--u) * 0.8) rgb(0 0 0 / 45%);
 }
 
+/* The quota spinner, `CreateQuotaWindow`: minus, the number, plus, then the
+   one button that acts on it. */
+.vk-event__quota {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.3);
+}
+.vk-event__quota-value {
+  min-width: calc(var(--u) * 1.4);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--vk-text-medium);
+}
+
 /* The Set window's two switches, each filling the width so they read as a pair. */
 .vk-set__toggle {
   width: 100%;

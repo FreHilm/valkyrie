@@ -23,10 +23,26 @@ export interface EventButton {
   disabled?: boolean
 }
 
+/**
+ * An event that asks for a number rather than a choice.
+ *
+ * `DialogWindow.CreateQuotaWindow` draws a `-` / value / `+` spinner and one
+ * button; what the player dials is what the event acts on.
+ */
+export interface EventQuota {
+  /** What the spinner opens on. */
+  value: number
+  /** `quotaInc` greys out here. */
+  max: number
+  onSubmit: (value: number) => void
+}
+
 export interface EventView {
   /** Already translated. Blank lines separate paragraphs, as the C# does. */
   text: string
   buttons: readonly EventButton[]
+  /** Present when the event wants a number; the first button submits it. */
+  quota?: EventQuota
   /** Drawn above the text, as `monsterImage` does. */
   image?: CanvasImageSource | string
   title?: Text
@@ -77,6 +93,11 @@ export function eventDialog(options: { rich?: RichTextOptions } = {}): EventDial
       }
 
       clear(actions)
+      const quota = view.quota
+      if (quota !== undefined) {
+        drawQuota(actions, quota, view.buttons[0])
+        return
+      }
       for (const action of view.buttons) {
         actions.append(
           button(rawText(action.text), {
@@ -93,4 +114,58 @@ export function eventDialog(options: { rich?: RichTextOptions } = {}): EventDial
       clear(actions)
     },
   }
+}
+
+/**
+ * The `-` / value / `+` spinner and the one button that submits it.
+ *
+ * `quotaDec` greys out at zero and `quotaInc` at ten, which is why the ends
+ * are disabled rather than clamped silently — the C# rebuilds the whole
+ * window on each press to achieve the same thing.
+ */
+function drawQuota(into: HTMLElement, quota: EventQuota, action: EventButton | undefined): void {
+  let value = Math.max(0, Math.min(quota.max, quota.value))
+
+  const render = (): void => {
+    clear(into)
+    const spinner = el('div', { class: 'vk-event__quota', attrs: { role: 'group' } })
+
+    spinner.append(
+      button(rawText('−'), {
+        onPress: () => {
+          value--
+          render()
+        },
+        describedBy: rawText('One fewer'),
+        disabled: value <= 0,
+      }),
+    )
+    spinner.append(
+      el('output', { class: 'vk-event__quota-value', text: String(value) }),
+    )
+    spinner.append(
+      button(rawText('+'), {
+        onPress: () => {
+          value++
+          render()
+        },
+        describedBy: rawText('One more'),
+        disabled: value >= quota.max,
+      }),
+    )
+    into.append(spinner)
+
+    if (action !== undefined) {
+      into.append(
+        button(rawText(action.text), {
+          onPress: () => {
+            quota.onSubmit(value)
+          },
+          variant: 'primary',
+        }),
+      )
+    }
+  }
+
+  render()
 }

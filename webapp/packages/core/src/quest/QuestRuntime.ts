@@ -112,6 +112,15 @@ export class QuestRuntime {
   readonly itemSelect = new Map<string, string>()
   /** Item to the event fired when it is inspected. */
   readonly itemInspect = new Map<string, string>()
+
+  /**
+   * `Quest.eventQuota`: how much a repeatable event has accumulated so far.
+   *
+   * Keyed by event section. An event with a `quota` asks the player for a
+   * number each time it runs and adds it here; only once the total reaches the
+   * quota does the event take its first button, and the tally is dropped.
+   */
+  readonly eventQuota = new Map<string, number>()
   readonly monsters: MonsterInstance[] = []
   /** Chosen heroes or investigators, in selection order. */
   readonly heroes: HeroInstance[] = []

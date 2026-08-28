@@ -42,6 +42,8 @@ export interface PlayableSession {
     name?: string
     text?: string
     buttons?: readonly { label: string; index: number; disabled: boolean }[]
+    /** Set when the event asks for a number rather than a choice. */
+    quota?: { value: number; max: number }
     monster?: { monsterName: string }
     activation?: { effect: string; masterActions: string; move: string; ad: unknown }
     phase?: string
@@ -53,6 +55,8 @@ export interface PlayableSession {
     }
   }
   press: (index: number) => void
+  /** `DialogWindow.onQuota`: what the player dialled on the spinner. */
+  pressQuota: (value: number) => void
   finishPuzzle: (name: string) => void
   closePuzzle: () => void
   activate: (name: string) => void
@@ -543,6 +547,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
     }
 
     if (current.kind === 'event') {
+      const quota = current.quota
       events.show({
         text: current.text ?? '',
         buttons: (current.buttons ?? []).map((b) => ({
@@ -553,6 +558,18 @@ export function playScreen(options: PlayOptions): PlayScreen {
           },
           ...(b.disabled ? { disabled: true } : {}),
         })),
+        ...(quota === undefined
+          ? {}
+          : {
+              quota: {
+                value: quota.value,
+                max: quota.max,
+                onSubmit: (value: number) => {
+                  session.pressQuota(value)
+                  refresh()
+                },
+              },
+            }),
       })
       overlay.append(events.element)
       return

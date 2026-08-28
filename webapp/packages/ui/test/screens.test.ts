@@ -230,3 +230,71 @@ describe('questDetails', () => {
     expect(details.querySelector('h2')?.textContent).toBe('Untitled')
   })
 })
+
+describe('eventDialog quota', () => {
+  const quotaView = (onSubmit = vi.fn(), value = 0) => ({
+    text: 'You search the room.',
+    buttons: [{ text: 'Search', onPress: vi.fn() }],
+    quota: { value, max: 10, onSubmit },
+  })
+  const at = (dialog: { element: HTMLElement }, t: string) =>
+    [...dialog.element.querySelectorAll('button')].find((b) => b.textContent === t)
+
+  it('draws a spinner and the one button that acts on it', () => {
+    // `CreateQuotaWindow` asks for a number, not a choice.
+    const dialog = eventDialog()
+    dialog.show(quotaView())
+
+    expect([...dialog.element.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+      '−',
+      '+',
+      'Search',
+    ])
+  })
+
+  it('submits what was dialled, not what it opened on', () => {
+    const onSubmit = vi.fn()
+    const dialog = eventDialog()
+    dialog.show(quotaView(onSubmit))
+
+    at(dialog, '+')?.click()
+    at(dialog, '+')?.click()
+    at(dialog, 'Search')?.click()
+
+    expect(onSubmit).toHaveBeenCalledWith(2)
+  })
+
+  it('opens on the value it was given', () => {
+    const dialog = eventDialog()
+    dialog.show(quotaView(vi.fn(), 3))
+
+    expect(dialog.element.querySelector('.vk-event__quota-value')?.textContent).toBe('3')
+  })
+
+  it('stops at nought and at the top', () => {
+    // `quotaDec` greys out at zero and `quotaInc` at ten.
+    const dialog = eventDialog()
+    dialog.show(quotaView(vi.fn(), 0))
+
+    expect(at(dialog, '−')?.disabled).toBe(true)
+    for (let i = 0; i < 10; i++) at(dialog, '+')?.click()
+    expect(at(dialog, '+')?.disabled).toBe(true)
+    expect(dialog.element.querySelector('.vk-event__quota-value')?.textContent).toBe('10')
+  })
+
+  it('leaves an ordinary event with its own buttons', () => {
+    const dialog = eventDialog()
+    dialog.show({
+      text: 'A door.',
+      buttons: [
+        { text: 'Open it', onPress: vi.fn() },
+        { text: 'Leave it', onPress: vi.fn() },
+      ],
+    })
+
+    expect([...dialog.element.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+      'Open it',
+      'Leave it',
+    ])
+  })
+})

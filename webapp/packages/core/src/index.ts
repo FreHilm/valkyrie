@@ -191,7 +191,12 @@ export type {
   CustomMonsterView,
 } from './quest/monsterSelection.js'
 export { QuestSession } from './quest/QuestSession.js'
-export type { SessionButton, SessionOptions, SessionView } from './quest/QuestSession.js'
+export type {
+  QuotaRequest,
+  SessionButton,
+  SessionOptions,
+  SessionView,
+} from './quest/QuestSession.js'
 export {
   bundleQuest,
   questActivations,
