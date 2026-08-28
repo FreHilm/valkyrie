@@ -1075,35 +1075,55 @@ side=TileSideFoyer
     return quest
   }
 
+  const owed = (quest: QuestSession): string[] => {
+    const seen: string[] = []
+    for (;;) {
+      const next = quest.takeAnnouncement()
+      if (next === null) return seen
+      seen.push(next)
+    }
+  }
+
   it('announces the mythos, then the investigators it hands back to', () => {
     const quest = idle()
     expect(quest.nextPhase()).toBe(true)
 
-    const first = quest.view()
-    expect(first.kind === 'phase' ? first.phase : null).toBe(MoMPhase.mythos)
-
-    quest.phaseAcknowledged()
-    const second = quest.view()
-    expect(second.kind === 'phase' ? second.phase : null).toBe(MoMPhase.investigator)
-
-    quest.phaseAcknowledged()
-    expect(quest.view().kind).toBe('board')
+    expect(owed(quest)).toEqual([MoMPhase.mythos, MoMPhase.investigator])
   })
 
-  it('keeps both rather than letting the later one replace the first', () => {
-    // A single slot dropped whichever was raised first, and which one that was
-    // depended on the order two unrelated methods happened to run in.
+  it('owes them once', () => {
+    // Drained, not read: an announcement is shown and gone.
     const quest = idle()
     quest.nextPhase()
+    owed(quest)
 
-    const seen: string[] = []
-    for (let step = 0; step < 4; step++) {
-      const view = quest.view()
-      if (view.kind !== 'phase') break
-      seen.push(String(view.phase))
-      quest.phaseAcknowledged()
-    }
+    expect(owed(quest)).toEqual([])
+  })
 
-    expect(seen).toEqual([MoMPhase.mythos, MoMPhase.investigator])
+  it('still owes the announcement when the mythos raises an event', () => {
+    // The event and the announcement are not alternatives — the C# puts the
+    // window over the dialog rather than instead of it. Kept apart from
+    // `view()` for exactly this: a mythos with something to say used to
+    // swallow its own announcement.
+    const quest = session(`[EventOpening]
+trigger=EventStart
+buttons=1
+event1=
+add=TileFoyer
+[TileFoyer]
+side=TileSideFoyer
+[EventOmen]
+trigger=Mythos
+buttons=1
+event1=
+`)
+    quest.start()
+    quest.press(0)
+    quest.nextPhase()
+
+    const view = quest.view()
+    expect(view.kind).toBe('event')
+    expect(view.kind === 'event' ? view.name : null).toBe('EventOmen')
+    expect(owed(quest)).toContain(MoMPhase.mythos)
   })
 })

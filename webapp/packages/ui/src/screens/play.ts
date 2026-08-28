@@ -65,6 +65,14 @@ export interface PlayableSession {
   nextPhase: () => boolean
   /** Which phase the round is in, for the label beside the arrow. */
   phase: () => 'investigator' | 'mythos' | 'monsters' | 'horror'
+  /**
+   * The next phase to announce, drained once. Null when none is owed.
+   *
+   * Separate from `view()` because an announcement covers what is on screen
+   * rather than being what is on screen — a mythos event's dialog is up behind
+   * it, which is exactly what `ChangePhaseWindow` preserves.
+   */
+  takeAnnouncement: () => 'investigator' | 'mythos' | 'monsters' | 'horror' | null
   /** `DialogWindow.onQuota`: what the player dialled on the spinner. */
   pressQuota: (value: number) => void
   /** What a combat dialog showed, for the quest log. Newlines already escaped. */
@@ -73,7 +81,6 @@ export interface PlayableSession {
   closePuzzle: () => void
   activate: (name: string) => void
   activationDone: () => void
-  phaseAcknowledged: () => void
   investigatorsDone: () => void
   endPhase: () => boolean
   runtime: {
@@ -363,14 +370,8 @@ export function playScreen(options: PlayOptions): PlayScreen {
   /** Whether the quest's end has already been handed over. */
   let ended = false
 
-  /**
-   * The phase last announced, so the same one is announced once.
-   *
-   * Cleared when the view moves off the transition. Without it a session that
-   * stays on a phase — a scenario whose mythos raises nothing, or a screen
-   * refreshed by something else — restarts the announcement forever.
-   */
-  let announced: string | null = null
+  /** Whether an announcement is up, so the next waits its turn. */
+  let announcing = false
 
   /** Whether the arrow has been pressed and is waiting to be confirmed. */
   let confirmingPhase = false
@@ -450,8 +451,10 @@ export function playScreen(options: PlayOptions): PlayScreen {
 
   const transition = phaseTransition({
     onDone: () => {
-      session.phaseAcknowledged()
-      refresh()
+      announcing = false
+      // Another may be waiting: an empty mythos hands straight back to the
+      // investigators, and both are owed to the player.
+      announce()
     },
     ...(options.transitionDuration === undefined ? {} : { duration: options.transitionDuration }),
   })
@@ -741,13 +744,41 @@ export function playScreen(options: PlayOptions): PlayScreen {
     }
   }
 
+  /**
+   * Puts up the next phase announcement, if one is owed.
+   *
+   * `ChangePhaseWindow` covers whatever is on screen rather than replacing it
+   * — a mythos event's dialog is already up behind it — so this is drawn over
+   * the top and never decides what else is showing.
+   */
+  function announce(): void {
+    if (announcing) return
+    const phase = session.takeAnnouncement()
+    if (phase === null) return
+
+    announcing = true
+    transition.show({
+      name: phaseName(phase),
+      background: options.phaseArt?.(phase) ?? null,
+      mythos: phase !== 'investigator',
+      ...(phase === 'investigator' ? { portraits: options.party?.() ?? [] } : {}),
+    })
+  }
+
   function refresh(): void {
+    draw()
+    // Last, and after every path through `draw` — an announcement covers
+    // whatever was drawn rather than deciding it, and `draw` returns early for
+    // most of what it can show.
+    announce()
+  }
+
+  function draw(): void {
     drawBoard()
     clear(overlay)
     clear(controls)
 
     const current = session.view()
-    if (current.kind !== 'phase') announced = null
 
     // Before anything is drawn: what is on screen belongs to the scenario
     // being left, and the next one is not loaded yet.
@@ -839,24 +870,6 @@ export function playScreen(options: PlayOptions): PlayScreen {
         },
       }
       options.onPuzzle?.(showing, chrome, overlay, refresh)
-      return
-    }
-
-    if (current.kind === 'phase') {
-      // `ChangePhaseWindow`: the whole board covered, the phase named, and it
-      // takes itself away — a beat rather than a question. Shown once per
-      // transition, because `refresh` runs again for anything that touches the
-      // board and restarting it would leave it up forever.
-      const phase = String(current.phase ?? '')
-      if (announced !== phase) {
-        announced = phase
-        transition.show({
-          name: phaseName(phase as ReturnType<PlayableSession['phase']>),
-          background: options.phaseArt?.(phase) ?? null,
-          mythos: phase !== 'investigator',
-          ...(phase === 'investigator' ? { portraits: options.party?.() ?? [] } : {}),
-        })
-      }
       return
     }
 

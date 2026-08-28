@@ -149,7 +149,6 @@ export type SessionView =
     }
   | { kind: 'puzzle'; puzzle: ActivePuzzle }
   | { kind: 'activation'; monster: MonsterInstance; activation: ActivationInstance }
-  | { kind: 'phase'; phase: MoMPhase }
   | { kind: 'ended' }
   /**
    * The scenario is handing over to another one. `path` names its `quest.ini`
@@ -214,8 +213,8 @@ export class QuestSession {
   readonly rounds: RoundControllerMoM
 
   private pending: RoundRequest | null = null
-  /** Announcements raised while one was already up, in the order they came. */
-  private readonly queuedTransitions: RoundRequest[] = []
+  /** Phases begun and not yet announced, oldest first. */
+  private readonly announcements: MoMPhase[] = []
 
   /** Set once a scenario has handed over; the host reloads and starts again. */
   private pendingQuest: string | null = null
@@ -281,12 +280,13 @@ export class QuestSession {
       questActivations: options.bundle.activations,
       random,
       present: (request) => {
-        // Queued, not replaced. A round can turn over inside the same call
-        // that announced the mythos — an empty mythos does exactly that — and
-        // a single slot would drop one of the two announcements. The C# has no
-        // slot at all: it puts each window up as it happens, and they stack.
-        if (request.kind === 'phaseTransition' && this.pending !== null) {
-          this.queuedTransitions.push(request)
+        // An announcement is not something the player is being asked; it is a
+        // layer over whatever they are already looking at. `ChangePhaseWindow`
+        // says so — "do NOT delete dialog, they are hidden behind the mythos
+        // phase" — so it goes on its own queue rather than into the slot that
+        // holds a monster activation.
+        if (request.kind === 'phaseTransition') {
+          this.announcements.push(request.phase)
           return
         }
         this.pending = request
@@ -382,7 +382,6 @@ export class QuestSession {
           activation: request.monster.currentActivation,
         }
       }
-      if (request.kind === 'phaseTransition') return { kind: 'phase', phase: request.phase }
     }
 
     return { kind: 'board' }
@@ -864,9 +863,15 @@ export class QuestSession {
   }
 
   /** The player acknowledged a phase change. */
-  phaseAcknowledged(): void {
-    // The next announcement, if the round raised more than one.
-    this.pending = this.queuedTransitions.shift() ?? null
+  /**
+   * The next phase to announce, or null when there is none waiting.
+   *
+   * Drained rather than read, because an announcement is shown once. A round
+   * can raise two in one go — an empty mythos hands straight back to the
+   * investigators — and both are owed to the player, in order.
+   */
+  takeAnnouncement(): MoMPhase | null {
+    return this.announcements.shift() ?? null
   }
 
   /** The investigators have finished their turn. */

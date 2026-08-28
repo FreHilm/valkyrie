@@ -46,12 +46,12 @@ function session(view: ReturnType<PlayableSession['view']>, over: Partial<Playab
       return true
     },
     phase: () => 'investigator' as const,
+    takeAnnouncement: () => null,
     logEntry: (t) => calls.push(`log:${t}`),
     finishPuzzle: (n) => calls.push(`finishPuzzle:${n}`),
     closePuzzle: () => calls.push('closePuzzle'),
     activate: (n) => calls.push(`activate:${n}`),
     activationDone: () => calls.push('activationDone'),
-    phaseAcknowledged: () => calls.push('phaseAcknowledged'),
     investigatorsDone: () => calls.push('investigatorsDone'),
     endPhase: () => {
       calls.push('endPhase')
@@ -228,10 +228,22 @@ describe('playScreen', () => {
     expect(screen.element.textContent).toContain('The Zombie lurches.')
   })
 
+  /** A session owing one announcement, as a round that has just turned over. */
+  const owing = (phase: string, view: Record<string, unknown> = { kind: 'board' }) => {
+    let owed: string | null = phase
+    return session(view as never, {
+      takeAnnouncement: () => {
+        const next = owed
+        owed = null
+        return next as never
+      },
+    })
+  }
+
   it('announces a phase change across the whole board', () => {
     // `ChangePhaseWindow` covers the board with the phase's own artwork and
     // names it. It is not a dialog and has no button — a beat, not a question.
-    const { session: s2 } = session({ kind: 'phase', phase: 'mythos' })
+    const { session: s2 } = owing('mythos')
     const screen = playScreen({
       session: s2,
       sources: SOURCES,
@@ -246,17 +258,36 @@ describe('playScreen', () => {
     expect(announcement?.querySelectorAll('button')).toHaveLength(0)
   })
 
-  it('acknowledges the phase once the announcement lifts', async () => {
-    const { session: s2, calls } = session({ kind: 'phase', phase: 'mythos' })
+  it('takes itself away again', async () => {
+    const { session: s2 } = owing('mythos')
     const screen = playScreen({ session: s2, sources: SOURCES, transitionDuration: 1 })
     document.body.append(screen.element)
+    const showing = () =>
+      screen.element.querySelector('.vk-phase')?.classList.contains('vk-phase--showing')
 
-    expect(calls).not.toContain('phaseAcknowledged')
+    expect(showing()).toBe(true)
     await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(showing()).toBe(false)
+  })
 
-    expect(calls).toContain('phaseAcknowledged')
+  it('covers a dialog rather than replacing it', () => {
+    // `ChangePhaseWindow`: "do NOT delete dialog, they are hidden behind the
+    // mythos phase". A scenario's own mythos event is up while the phase is
+    // announced, and is still there when it lifts — which is the whole reason
+    // an announcement is a layer and not a view of its own.
+    const { session: s2 } = owing('mythos', {
+      kind: 'event',
+      text: 'The sky turns blood red.',
+      buttons: [],
+    })
+    const screen = playScreen({ session: s2, sources: SOURCES, transitionDuration: 5 })
+    document.body.append(screen.element)
+
     expect(screen.element.querySelector('.vk-phase')?.classList.contains('vk-phase--showing')).toBe(
-      false,
+      true,
+    )
+    expect(screen.element.querySelector('.vk-play__overlay')?.textContent).toContain(
+      'The sky turns blood red.',
     )
   })
 
@@ -266,7 +297,7 @@ describe('playScreen', () => {
     const party = () => [{ name: 'Agatha Crane', image: 'blob:agatha' }]
     const build = (phase: string) => {
       document.body.replaceChildren()
-      const { session: s2 } = session({ kind: 'phase', phase })
+      const { session: s2 } = owing(phase)
       const screen = playScreen({ session: s2, sources: SOURCES, party, transitionDuration: 5 })
       document.body.append(screen.element)
       return screen
@@ -277,13 +308,15 @@ describe('playScreen', () => {
   })
 
   it('lets a player click through it', () => {
-    const { session: s2, calls } = session({ kind: 'phase', phase: 'mythos' })
+    const { session: s2 } = owing('mythos')
     const screen = playScreen({ session: s2, sources: SOURCES, transitionDuration: 100_000 })
     document.body.append(screen.element)
 
     screen.element.querySelector<HTMLElement>('.vk-phase')?.click()
 
-    expect(calls).toContain('phaseAcknowledged')
+    expect(screen.element.querySelector('.vk-phase')?.classList.contains('vk-phase--showing')).toBe(
+      false,
+    )
   })
 
   it('shows nothing over the board once the quest has ended', () => {
