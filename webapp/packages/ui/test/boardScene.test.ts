@@ -235,3 +235,34 @@ describe('buildScene highlight', () => {
     expect(highlightOf(buildScene([], [], sources(), null))).toBeUndefined()
   })
 })
+
+describe('buildScene interactivity', () => {
+  // The C# keeps tiles on their own canvas, which takes no clicks. Here a
+  // click on bare floor queued an event named after the tile and logged
+  // "Missing event called" for scenery nobody meant to touch.
+  it('marks tiles as scenery', () => {
+    const scene = buildScene([item('TileFoyer', 'Tile')], [], sources())
+
+    expect(scene.find((s) => s.id === 'TileFoyer')?.interactive).toBe(false)
+  })
+
+  it('leaves tokens, doors and monsters pressable', () => {
+    const scene = buildScene(
+      [item('TokenDoor', 'Token'), item('DoorMain', 'Door')],
+      [{ monsterName: 'Cultist' }],
+      sources(),
+    )
+
+    for (const built of scene) {
+      if (built.id === 'TileFoyer') continue
+      expect(built.interactive, built.id).not.toBe(false)
+    }
+  })
+
+  it('marks the highlight as a mark, not a thing to press', () => {
+    // Whatever it points at is already on the board underneath it.
+    const scene = buildScene([], [], sources(), { at: { x: 0, y: 0 }, item: null })
+
+    expect(scene.find((s) => s.id === 'highlight')?.interactive).toBe(false)
+  })
+})

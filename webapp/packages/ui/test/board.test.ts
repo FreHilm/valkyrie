@@ -266,3 +266,91 @@ describe('LAYER_ORDER', () => {
     expect(LAYER_ORDER[LAYER_ORDER.length - 1]).toBe(Layer.HIGHLIGHT)
   })
 })
+
+describe('board pieces', () => {
+  // A canvas is a single focus stop with nothing inside it, so every door,
+  // token and monster was unreachable without a pointer and silent to a
+  // screen reader.
+  const item = (id: string, over: Partial<BoardItem> = {}): BoardItem => ({
+    id,
+    layer: Layer.TOKEN,
+    placed: { centre: { x: 0, y: 0 }, width: 1, height: 1, rotation: 0 },
+    image: null,
+    label: id,
+    ...over,
+  })
+
+  const names = (view: { pieces: HTMLElement }) =>
+    [...view.pieces.querySelectorAll('button')].map((b) => b.textContent)
+
+  it('mirrors what is on the board into real buttons', () => {
+    const view = board({ label: 'Board' })
+    view.setItems([item('TokenDoor'), item('Cultist', { layer: Layer.MONSTER })])
+
+    expect(names(view)).toEqual(['TokenDoor', 'Cultist'])
+  })
+
+  it('leaves the scenery out', () => {
+    // Tabbing through twenty floor tiles to reach the door serves nobody.
+    const view = board({ label: 'Board' })
+    view.setItems([
+      item('TileFoyer', { layer: Layer.TILE, interactive: false }),
+      item('TokenDoor'),
+    ])
+
+    expect(names(view)).toEqual(['TokenDoor'])
+  })
+
+  it('selects the same item a click would', () => {
+    const chosen: string[] = []
+    const view = board({ label: 'Board', onSelect: (i) => chosen.push(i.id) })
+    view.setItems([item('TokenDoor')])
+
+    view.pieces.querySelector('button')?.click()
+    expect(chosen).toEqual(['TokenDoor'])
+  })
+
+  it('keeps up with the board', () => {
+    const view = board({ label: 'Board' })
+    view.setItems([item('TokenDoor')])
+    view.setItems([item('TokenDoor'), item('TokenChest')])
+
+    expect(names(view)).toEqual(['TokenDoor', 'TokenChest'])
+  })
+
+  it('leaves out what cannot be pressed', () => {
+    const view = board({ label: 'Board' })
+    view.setItems([item('TokenDoor', { disabled: true }), item('TokenChest')])
+
+    expect(names(view)).toEqual(['TokenChest'])
+  })
+
+  it('is announced as belonging to the board', () => {
+    const view = board({ label: 'Quest board' })
+
+    expect(view.pieces.getAttribute('aria-label')).toBe('Quest board: pieces')
+    // Off screen, not hidden: `display: none` would take it out of the focus
+    // order, which is the whole point of it.
+    expect(view.pieces.classList.contains('vk-visually-hidden')).toBe(true)
+  })
+})
+
+describe('board hit testing', () => {
+  it('ignores scenery, as the C# does by putting tiles on their own canvas', () => {
+    // A click on bare floor used to queue an event named after the tile and
+    // log "Missing event called" for something nobody meant to touch.
+    const view = board({ label: 'Board' })
+    view.setItems([
+      {
+        id: 'TileFoyer',
+        layer: Layer.TILE,
+        placed: { centre: { x: 0, y: 0 }, width: 10, height: 10, rotation: 0 },
+        image: null,
+        label: 'TileFoyer',
+        interactive: false,
+      },
+    ])
+
+    expect(view.itemAt({ x: 0, y: 0 })).toBeNull()
+  })
+})

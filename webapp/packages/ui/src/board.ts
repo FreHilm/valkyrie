@@ -42,6 +42,15 @@ export interface BoardItem {
   tint?: string
   /** Announced for this item; the board is otherwise invisible to a reader. */
   label?: string
+  /**
+   * Whether clicking this does anything. Scenery is not: the C# keeps tiles on
+   * their own canvas and only `tokenCanvas` and `monsterCanvas` take clicks,
+   * so a click on bare floor reached nothing there and reaches nothing here.
+   *
+   * Defaults to true, because everything a scenario puts on the board is
+   * interactive unless it is the floor under it.
+   */
+  interactive?: boolean
   /** Dimmed and not hit-tested. */
   disabled?: boolean
 }
@@ -55,6 +64,12 @@ export interface BoardOptions {
 
 export interface Board {
   element: HTMLElement
+  /**
+   * The board's pieces as focusable buttons, for a keyboard or a screen
+   * reader. Mounted beside the canvas; it carries its own visually-hidden
+   * styling, so where it goes only decides its reading order.
+   */
+  pieces: HTMLElement
   camera: BoardCamera
   setItems: (items: readonly BoardItem[]) => void
   /** Redraws on the next frame. Safe to call repeatedly. */
@@ -83,6 +98,11 @@ export function board(options: BoardOptions): Board {
       'aria-label': options.label,
       tabindex: 0,
     },
+  })
+  // Off screen but in the document: focusable, announced, and never drawn.
+  const pieces = el('ul', {
+    class: ['vk-board__pieces', 'vk-visually-hidden'],
+    attrs: { 'aria-label': `${options.label}: pieces` },
   })
   const camera = new BoardCamera(options.limits)
   /** An aim taken before the canvas had a size; applied on the first resize. */
@@ -120,7 +140,39 @@ export function board(options: BoardOptions): Board {
 
   const setItems = (next: readonly BoardItem[]): void => {
     items = next
+    drawPieces()
     invalidate()
+  }
+
+  /**
+   * The board's pieces as real buttons, off screen.
+   *
+   * A canvas is a single focus stop with nothing inside it, so every door,
+   * token and monster on the board was unreachable without a pointer and
+   * silent to a screen reader. This mirrors what is on the board into the one
+   * thing that already carries focus, a name and an activation: a button.
+   *
+   * Scenery is left out. It is not clickable, and a reader tabbing through
+   * twenty floor tiles to find the door is worse served than by a list of the
+   * things that actually do something.
+   */
+  function drawPieces(): void {
+    pieces.replaceChildren()
+    for (const item of items) {
+      if (item.interactive === false || item.disabled === true) continue
+      const name = item.label ?? item.id
+      if (name.length === 0) continue
+
+      const entry = document.createElement('li')
+      const control = document.createElement('button')
+      control.type = 'button'
+      control.textContent = name
+      control.addEventListener('click', () => {
+        options.onSelect?.(item)
+      })
+      entry.append(control)
+      pieces.append(entry)
+    }
   }
 
   const itemAt = (screen: Point): BoardItem | null => {
@@ -129,6 +181,7 @@ export function board(options: BoardOptions): Board {
     for (let i = items.length - 1; i >= 0; i--) {
       const item = items[i]
       if (item === undefined || item.disabled === true) continue
+      if (item.interactive === false) continue
       if (hitTest(item.placed, point)) return item
     }
     return null
@@ -158,6 +211,7 @@ export function board(options: BoardOptions): Board {
 
   return {
     element: canvas,
+    pieces,
     camera,
     setItems,
     invalidate,

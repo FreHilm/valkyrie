@@ -284,6 +284,8 @@ export function playScreen(options: PlayOptions): PlayScreen {
     },
   })
   surface.append(view.element)
+  // Beside the canvas: the same pieces, as buttons a keyboard can reach.
+  surface.append(view.pieces)
 
   /** `monster:<index>:<name>`, as `buildScene` writes it. */
   function monsterIndex(id: string): number | null {

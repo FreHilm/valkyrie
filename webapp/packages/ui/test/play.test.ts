@@ -70,6 +70,15 @@ function make(view: ReturnType<PlayableSession['view']>, over: Partial<PlayableS
 }
 
 const buttons = (root: HTMLElement): HTMLButtonElement[] => [...root.querySelectorAll('button')]
+/**
+ * Buttons that are not the board's own pieces.
+ *
+ * The board mirrors what is on it into an off-screen list of real buttons, so
+ * a keyboard can reach a door. A test about dialogs and controls has to say it
+ * means those, or it counts the board as well.
+ */
+const chrome = (root: HTMLElement): HTMLButtonElement[] =>
+  buttons(root).filter((b) => b.closest('.vk-board__pieces') === null)
 const press = (root: HTMLElement, name: string): void => {
   const target = buttons(root).find((b) => b.textContent?.includes(name))
   if (target === undefined) throw new Error(`no button matching ${name}`)
@@ -88,7 +97,7 @@ describe('playScreen', () => {
   it('offers the two things a player does that are not on the board', () => {
     const { screen } = make({ kind: 'board' })
 
-    expect(buttons(screen.element).map((b) => b.textContent)).toEqual([
+    expect(chrome(screen.element).map((b) => b.textContent)).toEqual([
       'End investigator turn',
       'Finish the phase',
     ])
@@ -123,7 +132,10 @@ describe('playScreen', () => {
       const { screen } = make(EVENT)
 
       expect(screen.element.textContent).toContain('The hallway is dark.')
-      expect(buttons(screen.element).map((b) => b.textContent)).toEqual(['Open the door', 'Locked'])
+      expect(chrome(screen.element).map((b) => b.textContent)).toEqual([
+        'Open the door',
+        'Locked',
+      ])
     })
 
     it('hides the turn controls, so the player answers first', () => {
@@ -177,7 +189,7 @@ describe('playScreen', () => {
   it('shows nothing over the board once the quest has ended', () => {
     const { screen } = make({ kind: 'ended' })
 
-    expect(buttons(screen.element)).toHaveLength(0)
+    expect(chrome(screen.element)).toHaveLength(0)
     expect(screen.element.querySelector('canvas')).not.toBeNull()
   })
 

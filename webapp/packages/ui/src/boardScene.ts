@@ -126,6 +126,10 @@ export function buildScene(
         placed,
         image: null,
         label: item.name,
+        // Floor. The C# keeps tiles on their own canvas, which takes no
+        // clicks; here a click on one queued an event named after the tile and
+        // logged "Missing event called" for scenery nobody meant to touch.
+        interactive: false,
         source: { path: art.image },
       })
       continue
@@ -179,6 +183,9 @@ export function buildScene(
     scene.push({
       id: 'highlight',
       layer: Layer.HIGHLIGHT,
+      // A mark over a space, not a thing to press: whatever it points at is
+      // already on the board underneath it.
+      interactive: false,
       placed: placeToken({ location: highlight.at, width: size.width, height: size.height }),
       image: null,
       // DEVIATION: the C# marker is a pulsing `sprites/target` reticle. A
