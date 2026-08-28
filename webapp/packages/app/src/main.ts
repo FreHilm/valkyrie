@@ -311,10 +311,11 @@ function heroesDemo(): void {
       { id: 'dexter', name: 'Dexter Drake' },
       { id: 'jim', name: 'Jim Culver' },
     ],
-    required: 2,
+    minimum: 2,
+    maximum: 4,
     title: rawText('Choose investigators'),
     confirmLabel: rawText('Begin'),
-    countLabel: (chosen, total) => `${chosen} of ${total} chosen`,
+    countLabel: (chosen, low, high) => `${chosen} chosen, ${low} to ${high} needed`,
     onConfirm: () => boardDemo(),
   })
   show(panel({ class: 'vk-shell', children: [backTo(menu), selection.element] }))

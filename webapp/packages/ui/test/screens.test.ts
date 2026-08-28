@@ -78,13 +78,14 @@ describe('heroSelection', () => {
     { id: 'c', name: 'Carolyn Fern' },
   ]
 
-  const make = (onConfirm = vi.fn(), required = 2) =>
+  const make = (onConfirm = vi.fn(), minimum = 2, maximum = minimum) =>
     heroSelection({
       available,
-      required,
+      minimum,
+      maximum,
       title: rawText('Choose investigators'),
       confirmLabel: rawText('Start'),
-      countLabel: (chosen, total) => `${chosen} of ${total}`,
+      countLabel: (chosen, low, high) => `${chosen} of ${low}-${high}`,
       onConfirm,
     })
 
@@ -107,14 +108,32 @@ describe('heroSelection', () => {
     expect(ui.chosen()).toEqual([])
   })
 
-  it('refuses to select more than the quest asks for', () => {
-    const ui = make(vi.fn(), 2)
+  it('refuses to select more than the quest has room for', () => {
+    const ui = make(vi.fn(), 1, 2)
     for (const tile of ui.element.querySelectorAll<HTMLButtonElement>('.vk-hero')) tile.click()
 
     expect(ui.chosen()).toHaveLength(2)
   })
 
-  it('keeps the confirm button disabled until the count is right', () => {
+  it('lets a party anywhere inside the quest’s range play', () => {
+    // `HeroCanvas.EndSelection` refuses below `minhero` and enforces nothing
+    // above: the ceiling is how many slots the quest made. A three-to-five
+    // scenario is playable by three, and by five.
+    const ui = make(vi.fn(), 1, 3)
+    const tiles = () => ui.element.querySelectorAll<HTMLButtonElement>('.vk-hero')
+    const confirm = () => [...ui.element.querySelectorAll<HTMLButtonElement>('button')].at(-1)
+
+    expect(confirm()?.disabled).toBe(true)
+    tiles()[0]?.click()
+    expect(confirm()?.disabled).toBe(false)
+    tiles()[1]?.click()
+    expect(confirm()?.disabled).toBe(false)
+    tiles()[2]?.click()
+    expect(ui.chosen()).toHaveLength(3)
+    expect(confirm()?.disabled).toBe(false)
+  })
+
+  it('keeps the confirm button disabled until there are enough', () => {
     const ui = make()
     const confirm = () => [...ui.element.querySelectorAll<HTMLButtonElement>('button')].at(-1)
 
@@ -138,7 +157,7 @@ describe('heroSelection', () => {
 
   it('announces the running count politely', () => {
     const ui = make()
-    expect(ui.element.querySelector('[aria-live="polite"]')?.textContent).toBe('0 of 2')
+    expect(ui.element.querySelector('[aria-live="polite"]')?.textContent).toBe('0 of 2-2')
   })
 })
 

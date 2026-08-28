@@ -102,12 +102,16 @@ export async function setUpParty(options: PartySetupOptions): Promise<void> {
   const chosen = await new Promise<readonly string[]>((resolve) => {
     const screen = heroSelection({
       available: roster,
-      // `maxHero` is what the grid counts up to; a scenario setting neither
-      // takes the game type's default, which the parser has already applied.
-      required: quest.minHero,
+      // The quest's own range. A scenario setting neither takes the game
+      // type's defaults, which the parser has already applied.
+      minimum: quest.minHero,
+      maximum: quest.maxHero,
       title: rawTitle('Choose your investigators'),
       confirmLabel: rawTitle('Finished'),
-      countLabel: (count, required) => `${String(count)} of ${String(required)} chosen`,
+      countLabel: (count, minimum, maximum) =>
+        minimum === maximum
+          ? `${String(count)} of ${String(minimum)} chosen`
+          : `${String(count)} chosen, ${String(minimum)} to ${String(maximum)} needed`,
       onConfirm: resolve,
     })
     options.present(screen.element)
@@ -116,6 +120,9 @@ export async function setUpParty(options: PartySetupOptions): Promise<void> {
   for (const heroName of chosen) {
     session.runtime.heroes.push({ heroName, activated: false })
   }
+  // `HeroCanvas.cs:279` raises a variable per chosen investigator, which is
+  // how a scenario asks whether a particular one came along.
+  for (const heroName of chosen) session.runtime.vars.setValue(`#${heroName}`, 1)
   // `EndSelection` sets morale from the count, and `HeroCanvas` sets `#heroes`.
   session.runtime.vars.setValue('#heroes', chosen.length)
   session.runtime.vars.setValue('$%morale', chosen.length)

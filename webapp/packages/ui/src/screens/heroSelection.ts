@@ -20,11 +20,18 @@ export interface Selectable {
 
 export interface HeroSelectionOptions {
   available: readonly Selectable[]
-  /** How many must be chosen before the quest can start. */
-  required: number
+  /**
+   * `minhero`: how few the quest can be played with.
+   *
+   * `HeroCanvas.EndSelection` refuses below this and enforces nothing above —
+   * the ceiling is how many hero slots the quest made, which is `maxhero`.
+   */
+  minimum: number
+  /** `maxhero`: how many the quest has room for. */
+  maximum: number
   title: Text
   confirmLabel: Text
-  countLabel: (chosen: number, required: number) => string
+  countLabel: (chosen: number, minimum: number, maximum: number) => string
   onConfirm: (chosen: readonly string[]) => void
 }
 
@@ -66,7 +73,7 @@ export function heroSelection(options: HeroSelectionOptions): HeroSelection {
         on: {
           click: () => {
             if (picked) chosen.delete(hero.id)
-            else if (chosen.size < options.required) chosen.add(hero.id)
+            else if (chosen.size < options.maximum) chosen.add(hero.id)
             render()
           },
         },
@@ -74,8 +81,9 @@ export function heroSelection(options: HeroSelectionOptions): HeroSelection {
       grid.append(tile)
     }
 
-    count.textContent = options.countLabel(chosen.size, options.required)
-    confirm.disabled = chosen.size !== options.required
+    count.textContent = options.countLabel(chosen.size, options.minimum, options.maximum)
+    // A range, not a number: a quest for three to five is playable by three.
+    confirm.disabled = chosen.size < options.minimum || chosen.size > options.maximum
   }
 
   render()
