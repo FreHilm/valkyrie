@@ -96,6 +96,13 @@ export class QuestLog implements Iterable<LogEntry> {
     return this.entries.map((entry, id) => entry.toString(id)).join('')
   }
 
+  /** A log holding exactly these entries, for one carried across an undo. */
+  static fromEntries(entries: readonly LogEntry[]): QuestLog {
+    const log = new QuestLog()
+    for (const entry of entries) log.add(entry)
+    return log
+  }
+
   /** Rebuilds a log from a parsed `[Log]` section. */
   static fromSection(section: ReadonlyMap<string, string>): QuestLog {
     const log = new QuestLog()

@@ -15,6 +15,7 @@ import { ActivationInstance } from './ActivationInstance.js'
 import type { ActivationView } from './ActivationInstance.js'
 import { EventManager } from './EventManager.js'
 import { IniData } from '../ini/IniData.js'
+import { readFromString } from '../ini/IniRead.js'
 import { parseIntInvariant } from '../config/parse.js'
 import { QuestLog } from './QuestLog.js'
 import { packVariables } from '../content/packSelection.js'
@@ -66,6 +67,24 @@ const intOrZero = (value: string | undefined): number =>
   value === undefined ? 0 : (parseIntInvariant(value) ?? 0)
 const boolOrFalse = (value: string | undefined): boolean =>
   value !== undefined && value.trim().toLowerCase() === 'true'
+
+/**
+ * What an undo point records.
+ *
+ * None of the file metadata matters to an undo — it never leaves memory and
+ * the quest it belongs to is already loaded — and the log is left out because
+ * an undo does not rewind what the player has read.
+ */
+const UNDO_STATE: SaveStateOptions = {
+  questPath: '',
+  originalPath: '',
+  questName: '',
+  valkyrieVersion: '',
+  packs: [],
+  duration: 0,
+  time: '',
+  includeLog: false,
+}
 
 /** What a save records that the quest itself does not know. */
 export interface SaveStateOptions {
@@ -201,6 +220,8 @@ export class QuestSession {
   private readonly monsterSelect = new Map<string, string>()
   /** `Quest.puzzle`: puzzles in progress, kept until solved. */
   private readonly puzzles = new Map<string, PuzzleState>()
+  /** `Quest.undo`: states to step back to, most recent last. */
+  private readonly undoStack: string[] = []
   private readonly options: SessionOptions
   private readonly gameType: 'MoM' | 'D2E'
   private readonly random: (count: number) => number
@@ -506,6 +527,10 @@ export class QuestSession {
 
   press(index: number): void {
     this.pending = null
+    // `DialogWindow.cs:302`: an event the player chose to open is one they can
+    // back out of, and the point to return to is recorded before it runs.
+    const opening = this.events.current
+    if (opening !== null && this.isCancelable(opening.sectionName)) this.pushUndo()
     // `DialogWindow.onButton` writes the text the player just read into the
     // log before ending the event, escaping its newlines the way a save file
     // carries them. Only a dialog does this — an invisible event is ended
@@ -655,6 +680,49 @@ export class QuestSession {
   }
 
   /**
+   * `Quest.Save`: records a point an undo can return to.
+   *
+   * Pushed *before* the thing that might be undone, which is why the C# calls
+   * it from the button handler rather than after the event has run.
+   *
+   * The stack is unbounded, as the C#'s is. A long quest keeps every state it
+   * has been in, which is a few tens of KB per entry and the price of being
+   * able to step back more than once.
+   */
+  private isCancelable(name: string): boolean {
+    const component = this.options.components.get(name)
+    return component instanceof QuestEvent && component.cancelable
+  }
+
+  pushUndo(): void {
+    this.undoStack.push(this.toSaveString(UNDO_STATE))
+  }
+
+  /** Whether there is anything to step back to. */
+  get canUndo(): boolean {
+    return this.undoStack.length > 0
+  }
+
+  /**
+   * `Quest.Undo`: steps back to the last recorded point.
+   *
+   * The log is not rewound. The C# carries the live log across the restore
+   * and appends a notice, because what the player has read is a record of the
+   * session rather than part of the state being undone — and losing it would
+   * hide that the undo happened at all.
+   */
+  undo(): boolean {
+    const previous = this.undoStack.pop()
+    if (previous === undefined) return false
+
+    const log = this.runtime.log.toArray()
+    this.restoreFrom(readFromString(previous))
+    this.runtime.restoreLog(QuestLog.fromEntries(log))
+    this.runtime.log.add(new LogEntry('Notice: Undo', true))
+    return true
+  }
+
+  /**
    * Puts a saved state back onto a freshly loaded quest, `Quest(saveData)`.
    *
    * The quest's components are already loaded — a save records *state*, not
@@ -784,6 +852,8 @@ export class QuestSession {
 
   /** The investigators have finished their turn. */
   investigatorsDone(): void {
+    // `NextStageButton.Next` records a point before advancing the round.
+    this.pushUndo()
     this.pending = null
     this.rounds.heroActivated()
   }

@@ -230,3 +230,125 @@ describe('QuestSession save round trip', () => {
     expect(back.runtime.boardItems()).toEqual([])
   })
 })
+
+/**
+ * The undo stack, `Quest.Save` and `Quest.Undo`.
+ *
+ * Built on the same serialiser: an undo point is the state written without its
+ * log, which is exactly `ToString(false)`.
+ */
+describe('QuestSession undo', () => {
+  // `cancelable` is a property of the *type*, not an ini key: doors, tokens
+  // and UI elements are cancelable "because you can select then cancel"
+  // (`QuestData.cs:351`). Clicking one is the undoable choice.
+  // `cancelable` is a property of the *type*, not an ini key: doors, tokens
+  // and UI elements are cancelable "because you can select then cancel"
+  // (`QuestData.cs:351`). Clicking one is the undoable choice.
+  //
+  // The point is recorded when the *button* is pressed, and an event's
+  // operations run when it fires (`EventManager.TriggerEvent`), so what an
+  // undo rolls back is what the button led to — not the token's own effect.
+  const CANCELABLE = `[EventOpening]
+trigger=EventStart
+buttons=1
+event1=
+add=TokenChoice
+[TokenChoice]
+buttons=1
+event1=EventConsequence
+[EventConsequence]
+buttons=1
+event1=
+operations=$doom,=,5
+`
+
+  it('has nothing to step back to before anything has happened', () => {
+    const quest = session()
+    expect(quest.canUndo).toBe(false)
+    expect(quest.undo()).toBe(false)
+  })
+
+  it('steps back to before an event the player chose to open', () => {
+    // `DialogWindow.cs:302` records the point when the event is `cancelable`.
+    const quest = session(CANCELABLE)
+    quest.start()
+    quest.press(0)
+    quest.activate('TokenChoice')
+
+    expect(quest.canUndo).toBe(false)
+    expect(quest.runtime.vars.getValue('$doom')).toBe(0)
+
+    quest.press(0)
+    expect(quest.runtime.vars.getValue('$doom')).toBe(5)
+    expect(quest.canUndo).toBe(true)
+
+    expect(quest.undo()).toBe(true)
+    expect(quest.runtime.vars.getValue('$doom')).toBe(0)
+  })
+
+  it('records no point for an event that cannot be backed out of', () => {
+    const quest = session(`[EventOpening]
+trigger=EventStart
+buttons=1
+event1=
+operations=$doom,=,5
+`)
+    quest.start()
+    quest.press(0)
+
+    expect(quest.canUndo).toBe(false)
+  })
+
+  it('keeps what the player has read, and says an undo happened', () => {
+    // `Quest.Undo` carries the live log across the restore and appends a
+    // notice: the log records the session, not the state being undone.
+    const quest = session(CANCELABLE)
+    quest.start()
+    quest.press(0)
+    quest.activate('TokenChoice')
+    quest.runtime.log.add(new LogEntry('You open the door.'))
+    quest.press(0)
+    quest.undo()
+
+    const entries = quest.runtime.log.toArray()
+    expect(entries.map((e) => e.entry)).toContain('You open the door.')
+    const notice = entries[entries.length - 1]
+    expect(notice?.entry).toBe('Notice: Undo')
+    // An editor entry, so it stays out of the player's log.
+    expect(notice?.editor).toBe(true)
+  })
+
+  it('steps back more than once, most recent first', () => {
+    const quest = session(CANCELABLE)
+    quest.start()
+    quest.press(0)
+
+    // Each round: click the token, press its button — which records the point
+    // — then clear the consequence dialog it opened before going again.
+    quest.activate('TokenChoice')
+    quest.press(0)
+    quest.press(0)
+    quest.runtime.vars.setValue('$step', 1)
+
+    quest.activate('TokenChoice')
+    quest.press(0)
+    quest.press(0)
+    quest.runtime.vars.setValue('$step', 2)
+
+    quest.undo()
+    expect(quest.runtime.vars.getValue('$step')).toBe(1)
+    quest.undo()
+    expect(quest.runtime.vars.getValue('$step')).toBe(0)
+    expect(quest.canUndo).toBe(false)
+    expect(quest.undo()).toBe(false)
+  })
+
+  it('records a point before the round advances', () => {
+    // `NextStageButton.Next`.
+    const quest = session()
+    quest.start()
+    quest.investigatorsDone()
+
+    expect(quest.canUndo).toBe(true)
+  })
+})
