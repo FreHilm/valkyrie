@@ -148,6 +148,7 @@ describe('the play screen driving a real session', () => {
     buttons(screen.element)[0]?.click()
     const before = session.runtime.vars.getValue('#round')
     press(screen.element, '➤')
+    press(screen.element, 'End Phase')
 
     // This scenario's mythos has nothing to add, so the round turns over
     // rather than resting there — `HeroActivated` ends by asking for a new
@@ -166,6 +167,7 @@ describe('the play screen driving a real session', () => {
     // One arrow carries the whole round. With no mythos events and no
     // monsters it turns straight over, which is what `ROUND` records.
     press(screen.element, '➤')
+    press(screen.element, 'End Phase')
 
     expect(session.runtime.vars.getValue('#round')).toBe(1)
     expect(session.runtime.log.toArray().some((e) => e.entry.includes('ROUND'))).toBe(true)

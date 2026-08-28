@@ -394,12 +394,18 @@ export class RoundControllerMoM extends RoundController {
     }
 
     this.phase = MoMPhase.mythos
+    // Announced before the events run, where the C# announces it after.
+    // `TriggerEvent` can turn the round straight over when the mythos has
+    // nothing to add, and that raises the investigators' own announcement —
+    // so announcing afterwards puts the two in the wrong order. The C# does
+    // not notice because its windows stack and expire together; this port
+    // shows them one at a time, so the order is the story's.
+    this.context.present({ kind: 'phaseTransition', phase: MoMPhase.mythos })
+
     events.triggerType('BeforeMonsterActivation', false)
     events.triggerType('Mythos', false)
     events.triggerType('EndInvestigatorTurn', false)
     events.triggerEvent()
-
-    this.context.present({ kind: 'phaseTransition', phase: MoMPhase.mythos })
   }
 
   override monsterActivated(): void {

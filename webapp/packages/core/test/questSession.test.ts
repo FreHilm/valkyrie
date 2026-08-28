@@ -1050,3 +1050,60 @@ yposition=0
     expect(new Set(names).size).toBe(4)
   })
 })
+
+/**
+ * Phase announcements, `ChangePhaseWindow.DisplayTransitionWindow`.
+ *
+ * A round can turn over inside the very call that announced the mythos — an
+ * empty mythos does exactly that — so two announcements are raised in one go.
+ * The C# does not notice because its windows stack and expire together; this
+ * port shows them one at a time, so both have to survive and in the order the
+ * player lived them.
+ */
+describe('QuestSession phase announcements', () => {
+  const idle = () => {
+    const quest = session(`[EventOpening]
+trigger=EventStart
+buttons=1
+event1=
+add=TileFoyer
+[TileFoyer]
+side=TileSideFoyer
+`)
+    quest.start()
+    quest.press(0)
+    return quest
+  }
+
+  it('announces the mythos, then the investigators it hands back to', () => {
+    const quest = idle()
+    expect(quest.nextPhase()).toBe(true)
+
+    const first = quest.view()
+    expect(first.kind === 'phase' ? first.phase : null).toBe(MoMPhase.mythos)
+
+    quest.phaseAcknowledged()
+    const second = quest.view()
+    expect(second.kind === 'phase' ? second.phase : null).toBe(MoMPhase.investigator)
+
+    quest.phaseAcknowledged()
+    expect(quest.view().kind).toBe('board')
+  })
+
+  it('keeps both rather than letting the later one replace the first', () => {
+    // A single slot dropped whichever was raised first, and which one that was
+    // depended on the order two unrelated methods happened to run in.
+    const quest = idle()
+    quest.nextPhase()
+
+    const seen: string[] = []
+    for (let step = 0; step < 4; step++) {
+      const view = quest.view()
+      if (view.kind !== 'phase') break
+      seen.push(String(view.phase))
+      quest.phaseAcknowledged()
+    }
+
+    expect(seen).toEqual([MoMPhase.mythos, MoMPhase.investigator])
+  })
+})

@@ -1090,6 +1090,70 @@ body {
   font-size: var(--vk-text-medium);
 }
 
+/* The prompt the arrow raises before a round is turned over. */
+.vk-play__confirm-actions {
+  display: flex;
+  gap: calc(var(--u) * 0.4);
+  margin-top: var(--vk-gap);
+}
+
+/*
+ * The phase announcement, `ChangePhaseWindow`: the whole board covered by the
+ * phase's own artwork, the name written across it, and the investigators lined
+ * up beneath. Silver for their phase, dark red for the mythos — the two colours
+ * the C# names outright.
+ */
+.vk-phase {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: none;
+  flex-direction: column;
+  /* The name sits near the top left and the party across the middle, which is
+     where `SetLocation(5, 3, ...)` and `GetVCenter()` put them. */
+  justify-content: flex-start;
+  gap: calc(var(--u) * 2);
+  padding: calc(var(--u) * 3) calc(var(--u) * 3) calc(var(--u) * 2);
+  background-color: #0b0b0d;
+  background-size: cover;
+  background-position: center;
+  cursor: pointer;
+}
+.vk-phase--showing {
+  display: flex;
+}
+.vk-phase__name {
+  margin: 0;
+  align-self: flex-start;
+  font-style: italic;
+  font-size: calc(var(--u) * 1.9);
+  color: #c0c0c0;
+  text-shadow: 0 calc(var(--u) * 0.1) calc(var(--u) * 0.3) rgb(0 0 0 / 80%);
+}
+.vk-phase--mythos .vk-phase__name {
+  color: #8b0000;
+}
+.vk-phase__party {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--u) * 1);
+  flex-wrap: wrap;
+}
+/* Round, as the app crops them, and sized as `heroSize` sizes them. */
+.vk-phase__portrait {
+  width: calc(var(--u) * 5);
+  height: calc(var(--u) * 5);
+  border-radius: 50%;
+  object-fit: cover;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vk-phase {
+    transition: none;
+  }
+}
+
 /* `MenuButton`: top right, clear of the phase bar and the monster strip. */
 .vk-play__menu-button {
   position: absolute;

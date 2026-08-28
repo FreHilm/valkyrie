@@ -214,6 +214,8 @@ export class QuestSession {
   readonly rounds: RoundControllerMoM
 
   private pending: RoundRequest | null = null
+  /** Announcements raised while one was already up, in the order they came. */
+  private readonly queuedTransitions: RoundRequest[] = []
 
   /** Set once a scenario has handed over; the host reloads and starts again. */
   private pendingQuest: string | null = null
@@ -279,6 +281,14 @@ export class QuestSession {
       questActivations: options.bundle.activations,
       random,
       present: (request) => {
+        // Queued, not replaced. A round can turn over inside the same call
+        // that announced the mythos — an empty mythos does exactly that — and
+        // a single slot would drop one of the two announcements. The C# has no
+        // slot at all: it puts each window up as it happens, and they stack.
+        if (request.kind === 'phaseTransition' && this.pending !== null) {
+          this.queuedTransitions.push(request)
+          return
+        }
         this.pending = request
       },
       resolveActivation: (activation, monster) => this.resolve(activation, monster),
@@ -855,7 +865,8 @@ export class QuestSession {
 
   /** The player acknowledged a phase change. */
   phaseAcknowledged(): void {
-    this.pending = null
+    // The next announcement, if the round raised more than one.
+    this.pending = this.queuedTransitions.shift() ?? null
   }
 
   /** The investigators have finished their turn. */

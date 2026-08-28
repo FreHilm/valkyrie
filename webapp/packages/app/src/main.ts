@@ -43,6 +43,7 @@ import {
   attackTypes,
   DEFAULT_LANGUAGE,
   HeroData,
+  ImageData,
   ItemData,
   LogEntry,
   MoMPhase,
@@ -1131,6 +1132,28 @@ async function play(
       gameType,
       pixelsPerSquare,
     }),
+    // `ChangePhaseWindow`: the artwork a phase is announced over, and the
+    // party lined up beneath the investigators' own.
+    phaseArt: (phase) => {
+      const data = content.tryGet(
+        ImageData,
+        phase === 'investigator' ? 'ImageGreenBG' : 'ImageMythosBackground',
+      )
+      const file = data === undefined ? null : resolveTexture(data.image)
+      return file === null ? null : imageUrl(file)
+    },
+    party: () =>
+      session.runtime.heroes
+        .map((hero) => hero.heroName)
+        .filter((name): name is string => name !== null)
+        .map((name) => {
+          const data = content.tryGet(HeroData, name)
+          const file = data === undefined ? null : resolveTexture(data.image)
+          return {
+            name: data?.name.translate() ?? name,
+            image: file === null ? null : imageUrl(file),
+          }
+        }),
     // `DrawItem`: the card an event hands over, drawn beside its dialog.
     itemImage: (id) => {
       const data = content.tryGet(ItemData, id)
@@ -1271,6 +1294,25 @@ async function play(
       return image
     },
   })
+
+  // The phase announcements are asked for the instant a round turns over, and
+  // `imageUrl` answers null until it has the bytes. Warmed here so the first
+  // transition has its artwork rather than a bare colour — nothing re-shows it
+  // once it is up.
+  for (const image of ['ImageGreenBG', 'ImageMythosBackground']) {
+    const data = content.tryGet(ImageData, image)
+    const file = data === undefined ? null : resolveTexture(data.image)
+    if (file !== null) imageUrl(file)
+  }
+  // And the party's portraits, which the investigators' own announcement lines
+  // up. Party setup decoded them through a different path, so this cache has
+  // not seen them.
+  for (const hero of session.runtime.heroes) {
+    if (hero.heroName === null) continue
+    const data = content.tryGet(HeroData, hero.heroName)
+    const file = data === undefined ? null : resolveTexture(data.image)
+    if (file !== null) imageUrl(file)
+  }
 
   sound = questAudio({ engine: audio, content, resolveFile: resolveTexture })
 

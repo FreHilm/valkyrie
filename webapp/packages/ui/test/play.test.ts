@@ -138,13 +138,35 @@ describe('playScreen', () => {
     expect(name?.classList.contains('vk-play__phase-name--danger')).toBe(true)
   })
 
-  it('moves the round on', () => {
+  it('asks before turning the round over', () => {
+    // The one move a player cannot take back without the undo, on a small
+    // target beside a board they have been clicking on.
+    const { screen, calls } = make({ kind: 'board' }, { runtime: PLACED })
+    press(screen.element, '➤')
+
+    expect(calls).not.toContain('nextPhase')
+    expect(screen.element.querySelector('.vk-play__confirm')?.textContent).toContain(
+      'End the Investigator Phase?',
+    )
+  })
+
+  it('moves the round on once that is confirmed', () => {
     // One call, whatever the phase: what the arrow does is the session's
     // business, not the screen's.
     const { screen, calls } = make({ kind: 'board' }, { runtime: PLACED })
     press(screen.element, '➤')
+    press(screen.element, 'End Phase')
 
     expect(calls).toContain('nextPhase')
+  })
+
+  it('leaves the round alone when the prompt is dismissed', () => {
+    const { screen, calls } = make({ kind: 'board' }, { runtime: PLACED })
+    press(screen.element, '➤')
+    press(screen.element, 'Cancel')
+
+    expect(calls).not.toContain('nextPhase')
+    expect(screen.element.querySelector('.vk-play__confirm')).toBeNull()
   })
 
   describe('when an event is open', () => {
@@ -206,9 +228,60 @@ describe('playScreen', () => {
     expect(screen.element.textContent).toContain('The Zombie lurches.')
   })
 
-  it('acknowledges a phase change', () => {
-    const { screen, calls } = make({ kind: 'phase', phase: 'mythos' })
-    press(screen.element, 'Continue')
+  it('announces a phase change across the whole board', () => {
+    // `ChangePhaseWindow` covers the board with the phase's own artwork and
+    // names it. It is not a dialog and has no button — a beat, not a question.
+    const { session: s2 } = session({ kind: 'phase', phase: 'mythos' })
+    const screen = playScreen({
+      session: s2,
+      sources: SOURCES,
+      phaseArt: () => 'blob:mythos',
+      transitionDuration: 5,
+    })
+    document.body.append(screen.element)
+
+    const announcement = screen.element.querySelector('.vk-phase')
+    expect(announcement?.classList.contains('vk-phase--showing')).toBe(true)
+    expect(announcement?.textContent).toContain('Mythos Phase')
+    expect(announcement?.querySelectorAll('button')).toHaveLength(0)
+  })
+
+  it('acknowledges the phase once the announcement lifts', async () => {
+    const { session: s2, calls } = session({ kind: 'phase', phase: 'mythos' })
+    const screen = playScreen({ session: s2, sources: SOURCES, transitionDuration: 1 })
+    document.body.append(screen.element)
+
+    expect(calls).not.toContain('phaseAcknowledged')
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    expect(calls).toContain('phaseAcknowledged')
+    expect(screen.element.querySelector('.vk-phase')?.classList.contains('vk-phase--showing')).toBe(
+      false,
+    )
+  })
+
+  it('lines the party up for their own phase, and not for the mythos', () => {
+    // `ChangePhaseWindow` draws the portraits for the investigators and, in
+    // its own words, "don't draw anything for Mythos phase".
+    const party = () => [{ name: 'Agatha Crane', image: 'blob:agatha' }]
+    const build = (phase: string) => {
+      document.body.replaceChildren()
+      const { session: s2 } = session({ kind: 'phase', phase })
+      const screen = playScreen({ session: s2, sources: SOURCES, party, transitionDuration: 5 })
+      document.body.append(screen.element)
+      return screen
+    }
+
+    expect(build('investigator').element.querySelectorAll('.vk-phase__portrait')).toHaveLength(1)
+    expect(build('mythos').element.querySelectorAll('.vk-phase__portrait')).toHaveLength(0)
+  })
+
+  it('lets a player click through it', () => {
+    const { session: s2, calls } = session({ kind: 'phase', phase: 'mythos' })
+    const screen = playScreen({ session: s2, sources: SOURCES, transitionDuration: 100_000 })
+    document.body.append(screen.element)
+
+    screen.element.querySelector<HTMLElement>('.vk-phase')?.click()
 
     expect(calls).toContain('phaseAcknowledged')
   })

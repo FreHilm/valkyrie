@@ -14,6 +14,7 @@
 import { activationDialog } from './activationDialog.js'
 import { eventDialog } from './eventDialog.js'
 import { gameMenu } from './gameMenu.js'
+import { phaseTransition } from './phaseTransition.js'
 import { inventory } from './inventory.js'
 import type { InventoryItem } from './inventory.js'
 import { monsterDialog } from './monsterDialog.js'
@@ -103,6 +104,9 @@ export interface PlayStrings {
   save: Text
   mainMenu: Text
   cancel: Text
+  /** Asked before the round is turned over, with the phase named in it. */
+  endPhasePrompt: (phase: Text) => Text
+  endPhaseConfirm: Text
   /** `SetWindow`'s two switches, and the `CLOSE` every menu shares. */
   setFire: Text
   clearFire: Text
@@ -122,6 +126,9 @@ const DEFAULT_STRINGS: PlayStrings = {
   items: rawText('Items'),
   set: rawText('Set'),
   log: rawText('Log'),
+  endPhasePrompt: (phase) =>
+    rawText(`End the ${phase.kind === 'raw' ? phase.value : phase.key.translate()}?`),
+  endPhaseConfirm: rawText('End Phase'),
   menu: rawText('Menu'),
   undo: rawText('Undo'),
   save: rawText('Save'),
@@ -241,6 +248,15 @@ export interface PlayOptions {
   rich?: RichTextOptions
   /** `DrawItem`: the card art for an item an event hands over. */
   itemImage?: (id: string) => string | null
+  /**
+   * `ImageGreenBG` and `ImageMythosBackground`: the artwork a phase is
+   * announced over.
+   */
+  phaseArt?: (phase: string) => string | null
+  /** The party's portraits, lined up under the investigators' own phase. */
+  party?: () => readonly { name: string; image: string | null }[]
+  /** How long the announcement stays up. Injected so tests need not wait. */
+  transitionDuration?: number
   /** Loads and crops an image; resolves to null when it is unavailable. */
   loadTexture?: (
     path: string,
@@ -347,6 +363,18 @@ export function playScreen(options: PlayOptions): PlayScreen {
   /** Whether the quest's end has already been handed over. */
   let ended = false
 
+  /**
+   * The phase last announced, so the same one is announced once.
+   *
+   * Cleared when the view moves off the transition. Without it a session that
+   * stays on a phase — a scenario whose mythos raises nothing, or a screen
+   * refreshed by something else — restarts the announcement forever.
+   */
+  let announced: string | null = null
+
+  /** Whether the arrow has been pressed and is waiting to be confirmed. */
+  let confirmingPhase = false
+
   function closeMenu(): void {
     openMenu = null
     refresh()
@@ -420,6 +448,14 @@ export function playScreen(options: PlayOptions): PlayScreen {
     },
   })
 
+  const transition = phaseTransition({
+    onDone: () => {
+      session.phaseAcknowledged()
+      refresh()
+    },
+    ...(options.transitionDuration === undefined ? {} : { duration: options.transitionDuration }),
+  })
+
   const questUi = questUiLayer({
     ...rich,
     onSelect: (name) => {
@@ -444,6 +480,9 @@ export function playScreen(options: PlayOptions): PlayScreen {
       controls,
       menuBar,
       menuButton,
+      // Over everything: `ChangePhaseWindow` covers the dialogs rather than
+      // closing them, so what was showing is still there when it lifts.
+      transition.element,
     ],
   })
 
@@ -633,7 +672,10 @@ export function playScreen(options: PlayOptions): PlayScreen {
     controls.append(
       button(strings.nextPhase, {
         onPress: () => {
-          session.nextPhase()
+          // Asked first: turning the round over is the one move a player
+          // cannot take back without the undo, and the arrow is a small
+          // target beside a board they have been clicking on.
+          confirmingPhase = true
           refresh()
         },
         size: 'large',
@@ -642,6 +684,40 @@ export function playScreen(options: PlayOptions): PlayScreen {
         ...(kind === 'board' ? {} : { disabled: true }),
       }),
     )
+  }
+
+  /** The prompt the arrow raises before the round is turned over. */
+  function drawPhasePrompt(): void {
+    if (!confirmingPhase) return
+    const ask = panel({
+      class: 'vk-play__confirm',
+      children: [
+        label(strings.endPhasePrompt(phaseName(session.phase())), { heading: 2, size: 'medium' }),
+      ],
+    })
+    const actions = el('div', { class: 'vk-play__confirm-actions', attrs: { role: 'group' } })
+    actions.append(
+      button(strings.endPhaseConfirm, {
+        onPress: () => {
+          confirmingPhase = false
+          session.nextPhase()
+          refresh()
+        },
+        variant: 'primary',
+        size: 'medium',
+      }),
+    )
+    actions.append(
+      button(strings.cancel, {
+        onPress: () => {
+          confirmingPhase = false
+          refresh()
+        },
+        size: 'medium',
+      }),
+    )
+    ask.append(actions)
+    menuLayer.append(ask)
   }
 
   /** The open menu, drawn over whatever dialog is already showing. */
@@ -671,6 +747,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
     clear(controls)
 
     const current = session.view()
+    if (current.kind !== 'phase') announced = null
 
     // Before anything is drawn: what is on screen belongs to the scenario
     // being left, and the next one is not loaded yet.
@@ -693,6 +770,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
       drawMenuBar(current.kind)
       drawPhaseBar(current.kind)
       drawMenu()
+      drawPhasePrompt()
     }
 
     if (current.kind === 'event') {
@@ -765,22 +843,20 @@ export function playScreen(options: PlayOptions): PlayScreen {
     }
 
     if (current.kind === 'phase') {
-      overlay.append(
-        panel({
-          class: 'vk-play__phase',
-          children: [
-            label(rawText(String(current.phase ?? '')), { heading: 2, size: 'medium' }),
-            button(strings.continueLabel, {
-              onPress: () => {
-                session.phaseAcknowledged()
-                refresh()
-              },
-              variant: 'primary',
-              size: 'medium',
-            }),
-          ],
-        }),
-      )
+      // `ChangePhaseWindow`: the whole board covered, the phase named, and it
+      // takes itself away — a beat rather than a question. Shown once per
+      // transition, because `refresh` runs again for anything that touches the
+      // board and restarting it would leave it up forever.
+      const phase = String(current.phase ?? '')
+      if (announced !== phase) {
+        announced = phase
+        transition.show({
+          name: phaseName(phase as ReturnType<PlayableSession['phase']>),
+          background: options.phaseArt?.(phase) ?? null,
+          mythos: phase !== 'investigator',
+          ...(phase === 'investigator' ? { portraits: options.party?.() ?? [] } : {}),
+        })
+      }
       return
     }
 
