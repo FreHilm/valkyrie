@@ -60,6 +60,10 @@ export interface PlayableSession {
     }
   }
   press: (index: number) => void
+  /** `NextStageButton.Next`: the one arrow that moves the round on. */
+  nextPhase: () => boolean
+  /** Which phase the round is in, for the label beside the arrow. */
+  phase: () => 'investigator' | 'mythos' | 'monsters' | 'horror'
   /** `DialogWindow.onQuota`: what the player dialled on the spinner. */
   pressQuota: (value: number) => void
   /** What a combat dialog showed, for the quest log. Newlines already escaped. */
@@ -80,8 +84,13 @@ export interface PlayableSession {
 
 export interface PlayStrings {
   boardLabel: Text
-  endTurn: Text
-  endPhase: Text
+  /** `CommonStringKeys.TAB`, the arrow that moves the round on. */
+  nextPhase: Text
+  /** The four phase names, for the label beside it. */
+  phaseInvestigator: Text
+  phaseMythos: Text
+  phaseMonsters: Text
+  phaseHorror: Text
   continueLabel: Text
   loading: Text
   /** `ITEMS_SMALL`, `SET` and `LOG` on the phase bar. */
@@ -103,8 +112,11 @@ export interface PlayStrings {
 
 const DEFAULT_STRINGS: PlayStrings = {
   boardLabel: rawText('Quest board'),
-  endTurn: rawText('End investigator turn'),
-  endPhase: rawText('Finish the phase'),
+  nextPhase: rawText('➤'),
+  phaseInvestigator: rawText('Investigator Phase'),
+  phaseMythos: rawText('Mythos Phase'),
+  phaseMonsters: rawText('Monster Step'),
+  phaseHorror: rawText('Horror Step'),
   continueLabel: rawText('Continue'),
   loading: rawText('Loading art…'),
   items: rawText('Items'),
@@ -540,6 +552,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
   function drawMenuBar(kind: string): void {
     clear(menuBar)
     clear(menuButton)
+    clear(controls)
     // The menu is always reachable, dialog or not: it is how a player saves
     // and how they leave, and neither should wait for an event to be answered.
     if (options.menus?.game !== undefined) {
@@ -596,6 +609,41 @@ export function playScreen(options: PlayOptions): PlayScreen {
     }
   }
 
+  /**
+   * The phase, and the one arrow that moves the round on.
+   *
+   * On the same row as the menus and, like them, under whatever dialog is up
+   * rather than inside it — `NextStageButton` tags the whole bar `UIPHASE`, so
+   * a player can always see which phase they are in. The arrow is disabled
+   * while a dialog shows, which is `Next` returning early.
+   */
+  function drawPhaseBar(kind: string): void {
+    const onBoard = session.runtime.boardItems().some((item) => item.component.type === 'Tile')
+    if (!onBoard) return
+
+    const phase = session.phase()
+    controls.append(
+      label(phaseName(phase), {
+        class:
+          phase === 'investigator'
+            ? 'vk-play__phase-name'
+            : ['vk-play__phase-name', 'vk-play__phase-name--danger'],
+      }),
+    )
+    controls.append(
+      button(strings.nextPhase, {
+        onPress: () => {
+          session.nextPhase()
+          refresh()
+        },
+        size: 'large',
+        class: 'vk-play__next',
+        describedBy: strings.nextPhase,
+        ...(kind === 'board' ? {} : { disabled: true }),
+      }),
+    )
+  }
+
   /** The open menu, drawn over whatever dialog is already showing. */
   function drawMenu(): void {
     clear(menuLayer)
@@ -643,6 +691,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
       openMenu = null
     } else {
       drawMenuBar(current.kind)
+      drawPhaseBar(current.kind)
       drawMenu()
     }
 
@@ -761,26 +810,14 @@ export function playScreen(options: PlayOptions): PlayScreen {
         return
       }
     }
+  }
 
-    // The board, with the two things a player can do that are not on it.
-    controls.append(
-      button(strings.endTurn, {
-        onPress: () => {
-          session.investigatorsDone()
-          refresh()
-        },
-        size: 'medium',
-      }),
-    )
-    controls.append(
-      button(strings.endPhase, {
-        onPress: () => {
-          session.endPhase()
-          refresh()
-        },
-        size: 'medium',
-      }),
-    )
+  /** The `val` name of a phase, which the C# colours red for anything but the first. */
+  function phaseName(phase: ReturnType<PlayableSession['phase']>): Text {
+    if (phase === 'mythos') return strings.phaseMythos
+    if (phase === 'monsters') return strings.phaseMonsters
+    if (phase === 'horror') return strings.phaseHorror
+    return strings.phaseInvestigator
   }
 
   refresh()

@@ -41,6 +41,11 @@ function session(view: ReturnType<PlayableSession['view']>, over: Partial<Playab
     view: () => view,
     press: (i) => calls.push(`press:${i}`),
     pressQuota: (v) => calls.push(`pressQuota:${v}`),
+    nextPhase: () => {
+      calls.push('nextPhase')
+      return true
+    },
+    phase: () => 'investigator' as const,
     logEntry: (t) => calls.push(`log:${t}`),
     finishPuzzle: (n) => calls.push(`finishPuzzle:${n}`),
     closePuzzle: () => calls.push('closePuzzle'),
@@ -60,6 +65,13 @@ function session(view: ReturnType<PlayableSession['view']>, over: Partial<Playab
     ...over,
   }
   return { session: base, calls }
+}
+
+/** A board with a tile on it, which the phase bar waits for. */
+const PLACED = {
+  boardItems: () => [{ name: 'TileFoyer', component: { type: 'Tile' } }],
+  monsters: [],
+  log: { toArray: () => [] },
 }
 
 function make(view: ReturnType<PlayableSession['view']>, over: Partial<PlayableSession> = {}) {
@@ -94,27 +106,45 @@ describe('playScreen', () => {
     expect(screen.element.querySelector('canvas')).not.toBeNull()
   })
 
-  it('offers the two things a player does that are not on the board', () => {
-    const { screen } = make({ kind: 'board' })
+  it('offers one arrow to move the round on, as the game does', () => {
+    // `NextStageButton` puts a single arrow in the corner. Two buttons asked
+    // the player to know which half of the round they were in, which is the
+    // question the arrow answers for them.
+    const { screen } = make({ kind: 'board' }, { runtime: PLACED })
 
-    expect(chrome(screen.element).map((b) => b.textContent)).toEqual([
-      'End investigator turn',
-      'Finish the phase',
-    ])
+    expect(chrome(screen.element).map((b) => b.textContent)).toEqual(['➤'])
   })
 
-  it('ends the investigator turn', () => {
-    const { screen, calls } = make({ kind: 'board' })
-    press(screen.element, 'End investigator turn')
+  it('names the phase beside it', () => {
+    const { screen } = make({ kind: 'board' }, { runtime: PLACED })
 
-    expect(calls).toContain('investigatorsDone')
+    expect(screen.element.querySelector('.vk-play__phase-name')?.textContent).toBe(
+      'Investigator Phase',
+    )
   })
 
-  it('finishes the phase, which the horror phase waits for', () => {
-    const { screen, calls } = make({ kind: 'board' })
-    press(screen.element, 'Finish the phase')
+  it('marks every phase but the investigators’ own', () => {
+    // White for the investigators, red for the rest — `NextStageButton` picks
+    // the colour the same way.
+    const { session: s } = session(
+      { kind: 'board' },
+      { phase: () => 'mythos' as const, runtime: PLACED },
+    )
+    const screen = playScreen({ session: s, sources: SOURCES })
+    document.body.append(screen.element)
 
-    expect(calls).toContain('endPhase')
+    const name = screen.element.querySelector('.vk-play__phase-name')
+    expect(name?.textContent).toBe('Mythos Phase')
+    expect(name?.classList.contains('vk-play__phase-name--danger')).toBe(true)
+  })
+
+  it('moves the round on', () => {
+    // One call, whatever the phase: what the arrow does is the session's
+    // business, not the screen's.
+    const { screen, calls } = make({ kind: 'board' }, { runtime: PLACED })
+    press(screen.element, '➤')
+
+    expect(calls).toContain('nextPhase')
   })
 
   describe('when an event is open', () => {
@@ -704,5 +734,35 @@ describe('playScreen game menu', () => {
     const { screen } = withMenu({}, { kind: 'ended' })
 
     expect(screen.element.querySelector('.vk-play__menu-button button')).toBeNull()
+  })
+})
+
+describe('playScreen phase bar under a dialog', () => {
+  // `NextStageButton` tags the whole bar `UIPHASE`, so it sits under whatever
+  // dialog is up rather than inside it. A player can always see which phase
+  // they are in — the arrow just will not act until they have answered.
+  const withDialog = (kind: string) =>
+    make({ kind, text: 'A door.', buttons: [] }, { runtime: PLACED })
+
+  it('keeps naming the phase while an event is showing', () => {
+    const { screen } = withDialog('event')
+
+    expect(screen.element.querySelector('.vk-play__phase-name')?.textContent).toBe(
+      'Investigator Phase',
+    )
+  })
+
+  it('greys the arrow out until the dialog is answered', () => {
+    // `if (FindGameObjectWithTag(Game.DIALOG) != null) return`.
+    const { screen } = withDialog('event')
+
+    const arrow = [...screen.element.querySelectorAll<HTMLButtonElement>('.vk-play__next')]
+    expect(arrow[0]?.disabled).toBe(true)
+  })
+
+  it('lets it act again once the board is clear', () => {
+    const { screen } = make({ kind: 'board' }, { runtime: PLACED })
+
+    expect(screen.element.querySelector<HTMLButtonElement>('.vk-play__next')?.disabled).toBe(false)
   })
 })

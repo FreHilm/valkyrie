@@ -35,7 +35,7 @@ event1=EventIntro
 buttons=2
 event1=EventOpen
 event2=
-add=TokenDoor
+add=TileHall TokenDoor
 [EventOpen]
 buttons=1
 event1=
@@ -45,6 +45,8 @@ remove=TokenDoor
 buttons=1
 event1=EventOpen
 [TokenInner]
+[TileHall]
+side=TileSideHall
 `
 
 function start() {
@@ -83,7 +85,8 @@ describe('the play screen driving a real session', () => {
     // EventStart1 is display=false glue; the player should never see it.
     const { screen } = start()
 
-    expect(buttons(screen.element)).toHaveLength(2)
+    // The event's own buttons, not the phase bar's arrow beside them.
+    expect(screen.element.querySelectorAll('.vk-play__overlay button')).toHaveLength(2)
   })
 
   it('falls back to the raw key when no translation is registered', () => {
@@ -100,12 +103,12 @@ describe('the play screen driving a real session', () => {
     // is presented. The player sees the board already changed behind the text.
     const { session, screen } = start()
 
-    expect(session.runtime.boardItems().map((i) => i.name)).toEqual(['TokenDoor'])
+    expect(session.runtime.boardItems().map((i) => i.name)).toEqual(['TileHall', 'TokenDoor'])
 
     // The first button chains to EventOpen, which swaps the door for the room.
     buttons(screen.element)[0]?.click()
 
-    expect(session.runtime.boardItems().map((i) => i.name)).toEqual(['TokenInner'])
+    expect(session.runtime.boardItems().map((i) => i.name)).toEqual(['TileHall', 'TokenInner'])
   })
 
   it('returns to the board once the events run out', () => {
@@ -113,10 +116,11 @@ describe('the play screen driving a real session', () => {
     buttons(screen.element)[0]?.click()
     buttons(screen.element)[0]?.click()
 
-    expect(buttons(screen.element).map((b) => b.textContent)).toEqual([
-      'End investigator turn',
-      'Finish the phase',
-    ])
+    // One arrow, as `NextStageButton` draws it, with the phase named beside it.
+    expect(buttons(screen.element).map((b) => b.textContent)).toEqual(['➤'])
+    expect(screen.element.querySelector('.vk-play__phase-name')?.textContent).toBe(
+      'Investigator Phase',
+    )
   })
 
   it('fires a token’s event when the player clicks it on the board', () => {
@@ -124,40 +128,44 @@ describe('the play screen driving a real session', () => {
     // Answer the intro with the button that ends the chain, leaving the door.
     buttons(screen.element)[1]?.click()
 
-    expect(session.runtime.boardItems().map((i) => i.name)).toEqual(['TokenDoor'])
+    expect(session.runtime.boardItems().map((i) => i.name)).toEqual(['TileHall', 'TokenDoor'])
 
     // Clicking it is what the board's onSelect does: it opens the token's own
     // event, which the player then answers. The board does not change until
     // they do.
     session.activate('TokenDoor')
     screen.refresh()
-    expect(session.runtime.boardItems().map((i) => i.name)).toEqual(['TokenDoor'])
+    expect(session.runtime.boardItems().map((i) => i.name)).toEqual(['TileHall', 'TokenDoor'])
 
     buttons(screen.element)[0]?.click()
 
-    expect(session.runtime.boardItems().map((i) => i.name)).toEqual(['TokenInner'])
+    expect(session.runtime.boardItems().map((i) => i.name)).toEqual(['TileHall', 'TokenInner'])
   })
 
   it('moves into the mythos phase when the turn ends', () => {
     const { session, screen } = start()
     buttons(screen.element)[0]?.click()
     buttons(screen.element)[0]?.click()
-    press(screen.element, 'End investigator turn')
+    const before = session.runtime.vars.getValue('#round')
+    press(screen.element, '➤')
 
-    expect(session.rounds.phase).toBe('mythos')
-    expect(screen.element.textContent).toContain('mythos')
+    // This scenario's mythos has nothing to add, so the round turns over
+    // rather than resting there — `HeroActivated` ends by asking for a new
+    // round, and the C# says so where it does it.
+    expect(session.runtime.vars.getValue('#round')).toBe(before + 1)
+    expect(session.rounds.phase).toBe('investigator')
   })
 
   it('writes what happened into the quest log', () => {
     const { session, screen } = start()
     buttons(screen.element)[0]?.click()
     buttons(screen.element)[0]?.click()
-    press(screen.element, 'End investigator turn')
-    press(screen.element, 'Continue')
-    // Mythos with no monsters goes to horror; the round turns over on the
-    // second finish, which is the horror phase waiting for the players.
-    press(screen.element, 'Finish the phase')
-    press(screen.element, 'Finish the phase')
+    // One arrow carries the whole round: investigators to mythos, mythos on
+    // through the monster step, and horror turns the round over. A phase
+    // transition puts a dialog up in between, which is answered as it comes.
+    // One arrow carries the whole round. With no mythos events and no
+    // monsters it turns straight over, which is what `ROUND` records.
+    press(screen.element, '➤')
 
     expect(session.runtime.vars.getValue('#round')).toBe(1)
     expect(session.runtime.log.toArray().some((e) => e.entry.includes('ROUND'))).toBe(true)

@@ -94,6 +94,13 @@ export interface EventContext {
   startQuest?: (path: string) => void
   /** The board and party state an event mutates. */
   runtime?: QuestRuntime
+  /**
+   * `RoundController.CheckNewRound`, asked before every event.
+   *
+   * Supplied by the session, which owns the round controller; the event
+   * manager is constructed first, so this is a hook rather than a reference.
+   */
+  checkNewRound?: () => boolean
   /** Presents an event and resolves when the player answers with a button. */
   present?: (event: EventDefinition) => void
   /** Plays a sound named by the event. */
@@ -235,6 +242,13 @@ export class EventManager {
    */
   triggerEvent(): void {
     if (this.current !== null) return
+
+    // `EventManager.cs:161`, and the first thing it does: every attempt to run
+    // the next event asks whether the round should turn over first. It is what
+    // moves the mythos on when nothing was added — `HeroActivated` says as
+    // much where it calls this — and without it a phase with no events of its
+    // own waits for a button that should not have to exist.
+    if (this.context.checkNewRound?.() === true) return
 
     while (this.stack.length > 0) {
       const name = this.stack.pop()

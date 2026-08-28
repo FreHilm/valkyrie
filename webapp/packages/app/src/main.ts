@@ -1102,6 +1102,10 @@ async function play(
     onPuzzle: puzzleRenderer({ components }),
     // The phase bar and its menus, all `val` keys the game already ships.
     strings: {
+      phaseInvestigator: text(new StringKey('val', 'PHASE_INVESTIGATOR')),
+      phaseMythos: text(new StringKey('val', 'PHASE_MYTHOS')),
+      phaseMonsters: text(new StringKey('val', 'MONSTER_STEP')),
+      phaseHorror: text(new StringKey('val', 'HORROR_STEP')),
       items: text(new StringKey('val', 'ITEMS_SMALL')),
       set: text(new StringKey('val', 'SET')),
       log: text(new StringKey('val', 'LOG')),

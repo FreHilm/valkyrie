@@ -47,6 +47,7 @@ import type { PuzzleState } from './puzzles.js'
 import type { ContentFields } from '../content/types.js'
 import { outputSymbolReplace } from './symbols.js'
 import type { Localization } from '../i18n/Localization.js'
+import { StringKey } from '../i18n/StringKey.js'
 import { LogEntry } from './QuestLog.js'
 
 /** `CommonStringKeys.CONTINUE`, the fallback when nothing else is pressable. */
@@ -256,6 +257,9 @@ export class QuestSession {
       startQuest: (path) => {
         this.pendingQuest = path
       },
+      // `EventManager.TriggerEvent` asks this first, every time: it is what
+      // turns the round over when a phase added no events of its own.
+      checkNewRound: () => this.rounds.checkNewRound(),
       ...(options.camera === undefined ? {} : { camera: options.camera }),
       rounds: {
         inMonsterPhase: () => this.rounds.inMonsterPhase(),
@@ -856,10 +860,81 @@ export class QuestSession {
 
   /** The investigators have finished their turn. */
   investigatorsDone(): void {
-    // `NextStageButton.Next` records a point before advancing the round.
-    this.pushUndo()
     this.pending = null
     this.rounds.heroActivated()
+  }
+
+  /**
+   * `NextStageButton.Next`: the one button that moves a Mansions game on.
+   *
+   * There is a single arrow in the corner, not a button per phase, and what it
+   * does depends on where the round has got to — the monster step hands over
+   * to horror, horror ends the round, and anything else gives the mythos its
+   * turn. Splitting that into two buttons asks the player to know which half
+   * of the round they are in, which is what the arrow is for.
+   *
+   * Returns false when it declined, which is not failure: the C# returns early
+   * while a dialog or a scenario's own screen is up, because the round is not
+   * the player's to turn over yet.
+   */
+  nextPhase(): boolean {
+    // `FindGameObjectWithTag(Game.DIALOG) != null`.
+    if (this.view().kind !== 'board') return false
+    // `UIItemsPresent`: a scenario's own screen elements are showing.
+    if (this.uiItemsPresent()) return false
+
+    this.pushUndo()
+
+    if (this.rounds.phase === MoMPhase.monsters) {
+      this.options.playAudio?.({ kind: 'trait', trait: 'horror' })
+      this.rounds.phase = MoMPhase.horror
+      return true
+    }
+
+    if (this.rounds.phase === MoMPhase.horror) {
+      this.endPhase()
+      return true
+    }
+
+    this.runtime.log.add(new LogEntry(this.phaseName(MoMPhase.mythos)))
+    this.investigatorsDone()
+    this.settle()
+    return true
+  }
+
+  /**
+   * The `val` name of a phase: what the label beside the arrow reads, and what
+   * the log records when the mythos takes its turn.
+   */
+  phaseName(phase: MoMPhase): string {
+    const key =
+      phase === MoMPhase.horror
+        ? 'HORROR_STEP'
+        : phase === MoMPhase.mythos
+          ? 'PHASE_MYTHOS'
+          : phase === MoMPhase.monsters
+            ? 'MONSTER_STEP'
+            : 'PHASE_INVESTIGATOR'
+    const localization = this.options.localization
+    return new StringKey('val', key).translate(localization === undefined ? {} : { localization })
+  }
+
+  /** Which phase the round is in, for the label beside the arrow. */
+  phase(): MoMPhase {
+    return this.rounds.phase
+  }
+
+  /**
+   * `Quest.UIItemsPresent`: whether a scenario's own screen is on the board.
+   *
+   * A cutscene page is a board component, so the round cannot be turned over
+   * underneath one.
+   */
+  private uiItemsPresent(): boolean {
+    for (const item of this.runtime.boardItems()) {
+      if (item.component.type === 'UI') return true
+    }
+    return false
   }
 
   /** The player clicked something on the board that fires an event. */

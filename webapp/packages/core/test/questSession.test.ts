@@ -396,12 +396,29 @@ event1=EventNowhere
     expect(quest.view().kind).toBe('board')
   })
 
-  it('moves into the mythos phase when the investigators finish', () => {
-    const quest = session('[EventIdle]\n')
+  it('moves into the mythos phase when it has something to say', () => {
+    const quest = session(`[EventIdle]
+[EventOmen]
+trigger=Mythos
+buttons=1
+event1=
+`)
     quest.investigatorsDone()
 
     expect(quest.rounds.phase).toBe(MoMPhase.mythos)
-    expect(quest.view().kind).toBe('phase')
+  })
+
+  it('turns the round over when the mythos has nothing to add', () => {
+    // `HeroActivated` ends by calling `TriggerEvent`, whose first act is
+    // `CheckNewRound` — "this will cause the next phase if nothing was added",
+    // as the C# puts it. A phase with no events of its own does not sit there
+    // waiting to be dismissed.
+    const quest = session('[EventIdle]\n')
+    const before = quest.runtime.vars.getValue('#round')
+    quest.investigatorsDone()
+
+    expect(quest.runtime.vars.getValue('#round')).toBe(before + 1)
+    expect(quest.rounds.phase).toBe(MoMPhase.investigator)
   })
 
   it('prefers an open event over a pending activation', () => {
@@ -956,5 +973,80 @@ event1=
     q.logEntry('')
 
     expect(q.runtime.log.length).toBe(0)
+  })
+})
+
+/**
+ * The one arrow, `NextStageButton.Next`.
+ *
+ * A Mansions game has a single button in the corner, not one per phase. What
+ * it does depends on where the round has got to, which is exactly the thing a
+ * player should not have to work out.
+ */
+describe('QuestSession nextPhase', () => {
+  it('declines while a dialog is up', () => {
+    // `if (FindGameObjectWithTag(Game.DIALOG) != null) return`. The round is
+    // not the player's to turn over until they have answered.
+    const quest = session(`[EventOpening]
+trigger=EventStart
+buttons=1
+event1=
+`)
+    quest.start()
+
+    expect(quest.view().kind).toBe('event')
+    expect(quest.nextPhase()).toBe(false)
+    expect(quest.canUndo).toBe(false)
+  })
+
+  it('declines while a scenario’s own screen is on the board', () => {
+    // `UIItemsPresent`: a cutscene page is a board component, and the round
+    // cannot turn over underneath one.
+    const quest = session(`[EventOpening]
+trigger=EventStart
+buttons=1
+event1=
+add=UIPage
+[UIPage]
+xposition=0
+yposition=0
+`)
+    quest.start()
+    quest.press(0)
+
+    expect(quest.view().kind).toBe('board')
+    expect(quest.nextPhase()).toBe(false)
+  })
+
+  it('hands the monster step over to horror rather than ending the round', () => {
+    const quest = session('[EventIdle]\n')
+    quest.rounds.phase = MoMPhase.monsters
+    const round = quest.runtime.vars.getValue('#round')
+
+    expect(quest.nextPhase()).toBe(true)
+    expect(quest.rounds.phase).toBe(MoMPhase.horror)
+    // The round is not over yet: the horror checks come first.
+    expect(quest.runtime.vars.getValue('#round')).toBe(round)
+  })
+
+  it('ends the round from the horror step', () => {
+    const quest = session('[EventIdle]\n')
+    quest.rounds.phase = MoMPhase.horror
+    const round = quest.runtime.vars.getValue('#round')
+
+    expect(quest.nextPhase()).toBe(true)
+    expect(quest.runtime.vars.getValue('#round')).toBe(round + 1)
+  })
+
+  it('names each phase from the val dictionary', () => {
+    const quest = session('[EventIdle]\n')
+
+    // Untranslated here, which is what a lookup with no dictionary gives; the
+    // point is that each phase asks for its own key rather than sharing one.
+    const names = [MoMPhase.investigator, MoMPhase.mythos, MoMPhase.monsters, MoMPhase.horror].map(
+      (phase) => quest.phaseName(phase),
+    )
+
+    expect(new Set(names).size).toBe(4)
   })
 })

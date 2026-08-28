@@ -990,16 +990,41 @@ body {
   border-radius: var(--vk-radius);
 }
 
+/*
+ * `NextStageButton`: the phase name in the middle, the arrow that moves it on
+ * hard against the right edge. The C# lays it out the same way, with the menu
+ * bar at the left of the same row.
+ */
 .vk-play__controls {
   position: absolute;
   left: 0;
   right: 0;
   bottom: calc(var(--u) * 0.5);
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   justify-content: center;
-  gap: calc(var(--u) * 0.3);
   pointer-events: none;
+}
+/* Italic, and red for every phase but the investigators' own. The C# gives it
+   a near-black background for the same reason: it sits over the board art. */
+.vk-play__phase-name {
+  margin: 0;
+  padding: calc(var(--u) * 0.15) calc(var(--u) * 0.5);
+  font-style: italic;
+  font-size: var(--vk-text-medium);
+  background: rgb(0 0 0 / 90%);
+  border-radius: var(--vk-radius);
+}
+.vk-play__phase-name--danger {
+  color: var(--vk-danger);
+}
+/* Pinned to the right edge rather than laid out, so the phase name keeps the
+   middle of the board to itself and never collides with the menus at the
+   left. `NextStageButton` positions all three the same way. */
+.vk-play__next {
+  position: absolute;
+  right: calc(var(--u) * 0.5);
+  min-width: calc(var(--u) * 3);
 }
 .vk-play__controls > * {
   pointer-events: auto;

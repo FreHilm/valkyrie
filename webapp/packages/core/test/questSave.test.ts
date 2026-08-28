@@ -348,11 +348,16 @@ operations=$doom,=,5
   })
 
   it('records a point before the round advances', () => {
-    // `NextStageButton.Next`.
+    // `NextStageButton.Next` is what saves, and it is the only thing that
+    // turns a round over — the phase primitives beneath it do not.
     const quest = session()
     quest.start()
-    quest.investigatorsDone()
+    quest.press(0)
+    quest.press(0)
 
+    // The board has to be clear: the arrow declines while a dialog is up.
+    expect(quest.view().kind).toBe('board')
+    expect(quest.nextPhase()).toBe(true)
     expect(quest.canUndo).toBe(true)
   })
 })
