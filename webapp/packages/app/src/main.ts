@@ -92,6 +92,7 @@ import { browsableQuests, byRecency, fetchQuestIndex, packageUrl } from './quest
 import { libraryPaths, normaliseQuestPath, startQuest, surveyLibrary } from './library.js'
 import { monsterProfile, questArt, questUiElements, tileImages } from './questArt.js'
 import { monsterDialogView } from './monsterView.js'
+import { puzzleRenderer } from './puzzleView.js'
 import { defaultQuestMusic, questAudio } from './questAudio.js'
 import { setUpParty } from './partySetup.js'
 import { formatBytes, storageReport } from './storage.js'
@@ -1019,6 +1020,9 @@ async function play(
     session,
     rich: { symbolOf: (character) => glyphs.get(character) ?? null },
     notices: () => [...missing],
+    // `EventManager.cs:309`: a puzzle event opens its window instead of a
+    // dialog, and the event's buttons only appear once it is solved.
+    onPuzzle: puzzleRenderer({ components }),
     // The phase bar and its menus, all `val` keys the game already ships.
     strings: {
       items: text(new StringKey('val', 'ITEMS_SMALL')),

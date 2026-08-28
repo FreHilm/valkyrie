@@ -122,9 +122,11 @@ export {
   CodeGuess,
   SlideBlock,
   TilePosition,
+  SLIDE_BOARD,
   defaultRandomRange,
 } from './quest/puzzles.js'
 export type { PuzzleState, RandomRange } from './quest/puzzles.js'
+export { slidePuzzleLayouts } from './quest/slidePuzzles.js'
 export { RoundController, RoundControllerMoM, MoMPhase } from './quest/RoundController.js'
 export { roundToInt } from './quest/RoundController.js'
 export type {

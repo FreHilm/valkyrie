@@ -361,7 +361,7 @@ export class SlideBlock {
 }
 
 /** The slide puzzle is played on a six-by-six board. */
-const SLIDE_BOARD = 6
+export const SLIDE_BOARD = 6
 
 export class PuzzleSlide implements PuzzleState {
   puzzle: SlideBlock[] = []
@@ -421,7 +421,14 @@ export class PuzzleSlide implements PuzzleState {
    * Returns false when the move is blocked or off its axis, so a caller cannot
    * count a move that did not happen.
    */
-  moveBlock(index: number, x: number, y: number): boolean {
+  /**
+   * Whether a block may be put down at `x, y`, without putting it there.
+   *
+   * The C# only asks this while moving, inside `MoveBlock`. A screen that
+   * offers the destinations rather than accepting a drag has to ask first, so
+   * the rules live here and `moveBlock` applies them.
+   */
+  canMove(index: number, x: number, y: number): boolean {
     const block = this.puzzle[index]
     if (block === undefined) return false
     if (block.xpos === x && block.ypos === y) return false
@@ -446,6 +453,30 @@ export class PuzzleSlide implements PuzzleState {
       if (candidate.blocksBlock(moved)) return false
     }
 
+    return true
+  }
+
+  /** Every square this block could be put down on, for a screen to offer. */
+  destinations(index: number): { x: number; y: number }[] {
+    const block = this.puzzle[index]
+    if (block === undefined) return []
+
+    const found: { x: number; y: number }[] = []
+    // One square past the board is the exit lane, which only a target may use;
+    // `canMove` is what decides that, so the scan simply offers it the square.
+    for (let step = 0; step <= SLIDE_BOARD; step++) {
+      const x = block.rotation ? block.xpos : step
+      const y = block.rotation ? step : block.ypos
+      if (this.canMove(index, x, y)) found.push({ x, y })
+    }
+    return found
+  }
+
+  moveBlock(index: number, x: number, y: number): boolean {
+    if (!this.canMove(index, x, y)) return false
+
+    const block = this.puzzle[index]
+    if (block === undefined) return false
     block.xpos = x
     block.ypos = y
     this.moves++
@@ -579,6 +610,11 @@ export class PuzzleTower implements PuzzleState {
     const from = this.puzzle[fromTower]!
     this.puzzle[toTower]!.push(from[from.length - 1]!)
     from.pop()
+    // `PuzzleTowerWindow.cs:239` counts the move rather than `PuzzleTower.Move`
+    // — as its slide and image counterparts also do. This port counts in the
+    // model for all three, so the tally survives a save without the screen
+    // having to keep it.
+    this.moves++
   }
 
   /** Every distinct state reachable in exactly `depth` reverse moves. */

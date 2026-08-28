@@ -11,7 +11,7 @@
 import { loadContent, loadQuest, textureResolver } from '@valkyrie/platform'
 import type { FileSystem, StoragePaths } from '@valkyrie/platform'
 import type { AudioRequest, CameraCommand, Quest } from '@valkyrie/core'
-import { bundleQuest, QuestSession } from '@valkyrie/core'
+import { bundleQuest, QuestSession, slidePuzzleLayouts } from '@valkyrie/core'
 import type { ContentData, QuestComponent, TraitedMonster } from '@valkyrie/core'
 
 export interface QuestEntry {
@@ -212,6 +212,10 @@ export async function startQuest(
     gameType,
     localization: content.context.localization,
     loadedPacks: content.loaded,
+    // A slide puzzle is picked from a shipped set rather than generated.
+    // Without them `PuzzleSlide.generate` returns null and the event falls
+    // back to drawing itself as an ordinary dialog.
+    slideLayouts: slidePuzzleLayouts(),
     ...(options.playAudio === undefined ? {} : { playAudio: options.playAudio }),
     isQuestTransition: (name) => nested.has(normaliseQuestPath(name)),
     ...(options.camera === undefined ? {} : { camera: options.camera }),

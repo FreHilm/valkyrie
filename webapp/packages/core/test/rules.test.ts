@@ -18,6 +18,7 @@ import {
   SlideBlock,
   TilePosition,
 } from '../src/quest/puzzles.js'
+import { slidePuzzleLayouts } from '../src/quest/slidePuzzles.js'
 
 const fields = (o: Record<string, string>) => new Map(Object.entries(o))
 
@@ -564,5 +565,108 @@ describe('puzzle moves', () => {
 
       expect(puzzle.moveBlock(9, 1, 2)).toBe(false)
     })
+  })
+})
+
+describe('PuzzleSlide destinations', () => {
+  // A screen that offers a block's legal squares rather than accepting a drag
+  // has to ask before moving. The C# only ever asks while moving, inside
+  // `MoveBlock`, so these cover the split.
+  const hardCodedBoard = () => PuzzleSlide.fromSaved(PuzzleSlide.hardCodedPuzzle())
+
+  it('offers only the squares a block can actually reach', () => {
+    const puzzle = hardCodedBoard()
+    for (const [index] of puzzle.puzzle.entries()) {
+      for (const square of puzzle.destinations(index)) {
+        expect(puzzle.canMove(index, square.x, square.y)).toBe(true)
+      }
+    }
+  })
+
+  it('never offers a block its own square', () => {
+    const puzzle = hardCodedBoard()
+    const block = puzzle.puzzle[0]
+    expect(block).toBeDefined()
+    expect(puzzle.destinations(0)).not.toContainEqual({ x: block?.xpos, y: block?.ypos })
+  })
+
+  it('offers squares along the axis the block slides on', () => {
+    // A block that does not rotate slides in x, and keeps its y throughout.
+    const puzzle = hardCodedBoard()
+    const index = puzzle.puzzle.findIndex((b) => !b.rotation)
+    const block = puzzle.puzzle[index]
+    expect(block).toBeDefined()
+    for (const square of puzzle.destinations(index)) expect(square.y).toBe(block?.ypos)
+  })
+
+  it('asking does not move anything', () => {
+    const puzzle = hardCodedBoard()
+    const before = puzzle.puzzle.map((b) => `${String(b.xpos)},${String(b.ypos)}`).join(' ')
+    const movesBefore = puzzle.moves
+    for (const [index] of puzzle.puzzle.entries()) puzzle.destinations(index)
+
+    expect(puzzle.puzzle.map((b) => `${String(b.xpos)},${String(b.ypos)}`).join(' ')).toBe(before)
+    expect(puzzle.moves).toBe(movesBefore)
+  })
+
+  it('still refuses an illegal move through moveBlock', () => {
+    const puzzle = hardCodedBoard()
+    expect(puzzle.moveBlock(0, 99, 99)).toBe(false)
+  })
+})
+
+describe('PuzzleTower moves', () => {
+  it('counts a move that happened, and not one that did not', () => {
+    // The C# counts in `PuzzleTowerWindow`; this port counts in the model, as
+    // it already does for slide and image, so a save carries the tally.
+    const tower = PuzzleTower.generate(3, (min, max) => min + ((max - min) >> 1))
+    const legal: [number, number][] = []
+    for (let a = 0; a < tower.puzzle.length; a++) {
+      for (let b = 0; b < tower.puzzle.length; b++) {
+        if (a !== b && tower.moveOK(a, b)) legal.push([a, b])
+      }
+    }
+    expect(legal.length).toBeGreaterThan(0)
+
+    const [from, to] = legal[0] as [number, number]
+    tower.move(from, to)
+    expect(tower.moves).toBe(1)
+
+    // Moving a larger disc onto a smaller one is refused, and uncounted.
+    const illegal = tower.puzzle.findIndex((_, i) => i !== to && !tower.moveOK(to, i))
+    if (illegal >= 0) {
+      tower.move(to, illegal)
+      expect(tower.moves).toBe(1)
+    }
+  })
+})
+
+
+describe('slidePuzzleLayouts', () => {
+  it('ships every layout the C# resource carries', () => {
+    // `Assets/Resources/slidepuzzles.txt`. Without these `PuzzleSlide.generate`
+    // returns null for every difficulty and the event draws itself as an
+    // ordinary dialog instead of a puzzle.
+    expect(slidePuzzleLayouts().size).toBe(35)
+  })
+
+  it('answers every difficulty a scenario can ask for', () => {
+    const layouts = slidePuzzleLayouts()
+    for (const depth of [1, 2, 3, 4, 5]) {
+      const puzzle = PuzzleSlide.generate(depth, layouts, (min) => min)
+      expect(puzzle, `depth ${String(depth)}`).not.toBeNull()
+      expect(puzzle?.puzzle.length).toBeGreaterThan(0)
+      // A freshly generated puzzle starts with no moves against it, whatever
+      // the layout recorded as its solution length.
+      expect(puzzle?.moves).toBe(0)
+    }
+  })
+
+  it('parses each layout into blocks rather than raw fields', () => {
+    const layouts = slidePuzzleLayouts()
+    for (const [name, fields] of layouts) {
+      expect(fields.get('moves'), name).toBeDefined()
+      expect(PuzzleSlide.fromSaved(fields).puzzle.length, name).toBeGreaterThan(0)
+    }
   })
 })
