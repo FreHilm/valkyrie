@@ -35,6 +35,7 @@ import {
   questLog,
   questSelection,
   rawText,
+  saveSelect,
   text,
 } from '@valkyrie/ui'
 import {
@@ -79,8 +80,8 @@ import {
   questFileResolver,
   StoragePaths,
   TextureCache,
+  listSaves,
   loadSave,
-  SaveError,
   volumeFromConfig,
   writeSave,
 } from '@valkyrie/platform'
@@ -236,7 +237,7 @@ function menu(): void {
           title: rawText('Main menu'),
           actions: [
             { label: rawText('Play a quest'), onPress: () => void library() },
-            { label: rawText('Resume'), onPress: () => void resumeQuest() },
+            { label: rawText('Load a game'), onPress: () => void resumeQuest() },
             { label: rawText('Import game files'), onPress: importDemo },
             { label: rawText('Load from dev server'), onPress: () => void devLoad() },
             { label: rawText('Content'), onPress: () => void contentSelectScreen() },
@@ -1422,18 +1423,69 @@ async function resumeQuest(): Promise<void> {
   const context = { fs, paths: storage, currentVersion: SAVE_VERSION }
 
   const status = el('p', { class: 'vk-shell__status', attrs: { 'aria-live': 'polite' } })
-  show(panel({ class: 'vk-shell', children: [backTo(menu), status] }))
+  const screen = saveSelect({
+    mode: 'load',
+    onBack: menu,
+    onSelect: (slot) => {
+      void (async () => {
+        try {
+          const save = await loadSave(context, slot)
+          await play(fs, libraryPaths(storage), save.questPath, save.questPath, save.data)
+        } catch (error) {
+          status.textContent = `That save could not be opened: ${String(error)}`
+        }
+      })()
+    },
+  })
+  show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element, status] }))
 
-  try {
-    const save = await loadSave(context, AUTOSAVE_SLOT)
-    const paths = libraryPaths(storage)
-    await play(fs, paths, save.questPath, save.questPath, save.data)
-  } catch (error) {
-    status.textContent =
-      error instanceof SaveError && error.rejection === 'missing'
-        ? 'There is no saved game yet. Play a quest and it will save itself.'
-        : `That save could not be opened: ${String(error)}`
-  }
+  const metadata = await listSaves(context)
+  const urls: string[] = []
+  screen.show(
+    metadata.map((entry) => {
+      const image =
+        entry.image === null
+          ? undefined
+          : URL.createObjectURL(new Blob([new Uint8Array(entry.image)], { type: 'image/png' }))
+      if (image !== undefined) urls.push(image)
+      return {
+        slot: entry.slot,
+        save:
+          entry.questName.length === 0 && entry.saveTime === null
+            ? null
+            : {
+                questName: entry.questName,
+                time: readableTime(entry.saveTime),
+                ...(image === undefined ? {} : { image }),
+              },
+        rejection: rejectionText(entry.rejection),
+      }
+    }),
+  )
+  onLeave(() => {
+    for (const url of urls) URL.revokeObjectURL(url)
+  })
+}
+
+/**
+ * A save's timestamp in the reader's own locale.
+ *
+ * The C# writes `DateTime.Now.ToString()`, which is already the local format;
+ * this port writes ISO so the value parses anywhere, and turns it back here.
+ */
+function readableTime(value: string | null): string | null {
+  if (value === null) return null
+  const when = new Date(value)
+  return Number.isNaN(when.getTime()) ? value : when.toLocaleString()
+}
+
+/** Why a save will not open, in words rather than a code. */
+function rejectionText(rejection: string | null): string | null {
+  if (rejection === null) return null
+  if (rejection === 'future-version') return 'Saved by a newer version'
+  if (rejection === 'unsupported-version') return 'Saved by a version too old to read'
+  if (rejection === 'unreadable') return 'This save is damaged'
+  return null
 }
 
 /**

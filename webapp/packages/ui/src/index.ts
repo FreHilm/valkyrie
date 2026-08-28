@@ -88,6 +88,13 @@ export type {
   LogLine,
   QuestVariable,
 } from './screens/questLog.js'
+export { saveSelect } from './screens/saveSelect.js'
+export type {
+  SaveSelect,
+  SaveSelectOptions,
+  SaveSelectStrings,
+  SaveSlotView,
+} from './screens/saveSelect.js'
 export { setWindow } from './screens/setWindow.js'
 export type {
   SetWindow,

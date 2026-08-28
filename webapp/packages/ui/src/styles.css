@@ -1065,6 +1065,38 @@ body {
   font-size: var(--vk-text-medium);
 }
 
+/* Save slots: four rows that stay in the same places, so a player can keep
+   track of which is which by position as much as by name. */
+.vk-saves__list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.3);
+  margin-block: var(--vk-gap);
+}
+.vk-saves__slot {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 0.5);
+  width: 100%;
+  text-align: left;
+}
+.vk-saves__detail {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 0.4);
+  justify-content: flex-end;
+  font-size: var(--vk-text-small);
+  opacity: 0.85;
+}
+.vk-saves__thumb {
+  width: calc(var(--u) * 4);
+  border-radius: calc(var(--vk-radius) / 2);
+}
+.vk-saves__rejection {
+  color: var(--vk-danger);
+}
+
 /* The Set window's two switches, each filling the width so they read as a pair. */
 .vk-set__toggle {
   width: 100%;
