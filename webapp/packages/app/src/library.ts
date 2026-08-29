@@ -320,7 +320,12 @@ export async function startQuest(
 
   const quest = await loadQuest(fs, questPath, content.context.localization)
 
-  const { MonsterData: Monsters, ActivationData: Activations } = await import('@valkyrie/core')
+  const {
+    MonsterData: Monsters,
+    ActivationData: Activations,
+    ItemData: Items,
+    TileSideData: TileSides,
+  } = await import('@valkyrie/core')
   const contentMonsters = new Map<
     string,
     TraitedMonster & { sectionName: string; activations: readonly string[] }
@@ -343,6 +348,18 @@ export async function startQuest(
     components: quest.components,
     contentMonsters,
     contentActivations: new Map(content.content.getAll(Activations)),
+    // `getComponentText` reads these out of `ContentData` to turn a `{c:...}`
+    // marker into what the thing is called. Null when the content has no such
+    // entry, which leaves the marker's own name showing rather than a blank.
+    contentName: (kind, name) => {
+      const data =
+        kind === 'tileSide'
+          ? content.content.tryGet(TileSides, name)
+          : kind === 'monster'
+            ? content.content.tryGet(Monsters, name)
+            : content.content.tryGet(Items, name)
+      return data === undefined ? null : data.name.translate()
+    },
     gameType,
     localization: content.context.localization,
     loadedPacks: content.loaded,

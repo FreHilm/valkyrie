@@ -44,7 +44,11 @@ function session(
  * back as its own key — fine for the routing tests, useless for anything that
  * asserts on prose.
  */
-function localizedSession(ini: string, text: readonly string[]): QuestSession {
+function localizedSession(
+  ini: string,
+  text: readonly string[],
+  contentName?: (kind: 'tileSide' | 'monster' | 'item', name: string) => string | null,
+): QuestSession {
   const components = loadQuestSections(readFromString(ini), 'test.ini', {})
   const localization = new Localization()
   localization.addDictionary('qst', new DictionaryI18n(['.,English', ...text]))
@@ -53,6 +57,7 @@ function localizedSession(ini: string, text: readonly string[]): QuestSession {
     components,
     random: () => 0,
     localization,
+    ...(contentName === undefined ? {} : { contentName }),
   })
   built.runtime.heroes.push({ heroName: 'HeroAshcanPete', activated: false })
   return built
@@ -1338,5 +1343,182 @@ text=A desk.
     expect(built.runtime.log.toArray().map((e) => e.entry)).toContain(
       'Warning: Missing event called: EventGone',
     )
+  })
+})
+
+/**
+ * `{c:Name}` in a scenario's prose: `Event.ReplaceComponentText`.
+ *
+ * A scenario writes "Add the {c:TileTownsquare} tile" rather than naming the
+ * tile outright, so the sentence survives the tile being swapped or the text
+ * being translated. What a marker resolves to depends on what the component
+ * is, and the C# switches on its type.
+ */
+describe('component names in text', () => {
+  /** Stands in for `ContentData`, which this package cannot reach. */
+  const content = (entries: Record<string, string>) => (_kind: string, name: string) =>
+    entries[name] ?? null
+
+  it('names the tile by its side, not by its section', () => {
+    const built = localizedSession(
+      `[EventStart]
+trigger=EventStart
+buttons=1
+event1=
+
+[TileTownsquare]
+side=TileSideTownsquare
+`,
+      ['EventStart.text,"Add the {c:TileTownsquare} tile."'],
+      content({ TileSideTownsquare: 'Town Square' }),
+    )
+    built.start()
+
+    const view = built.view()
+    expect(view.kind === 'event' && view.text).toBe('Add the Town Square tile.')
+  })
+
+  it('names the item a quest handed over', () => {
+    const built = localizedSession(
+      `[EventStart]
+trigger=EventStart
+buttons=1
+event1=
+add=QItemKey
+
+[QItemKey]
+traits=key
+`,
+      ['EventStart.text,"You find the {c:QItemKey}."'],
+      content({ ItemSilverKey: 'Silver Key' }),
+    )
+    built.runtime.itemSelect.set('QItemKey', 'ItemSilverKey')
+    built.start()
+
+    const view = built.view()
+    expect(view.kind === 'event' && view.text).toBe('You find the Silver Key.')
+  })
+
+  it('falls back to the section name when nothing has been chosen yet', () => {
+    // `getComponentText` returns the section name for an item the quest has
+    // not resolved — the marker still reads as something rather than nothing.
+    const built = localizedSession(
+      `[EventStart]
+trigger=EventStart
+buttons=1
+event1=
+
+[QItemKey]
+traits=key
+`,
+      ['EventStart.text,"You find the {c:QItemKey}."'],
+      content({}),
+    )
+    built.start()
+
+    const view = built.view()
+    expect(view.kind === 'event' && view.text).toBe('You find the QItemKey.')
+  })
+
+  it('leaves a marker alone when the scenario declares no such thing', () => {
+    // `TryGetValue` fails and the C# moves on without replacing, so the
+    // marker stays on screen. Ugly, and deliberately not improved on: a
+    // scenario naming something it does not define is a fault in the
+    // scenario, and hiding it would hide that.
+    const built = localizedSession(
+      `[EventStart]
+trigger=EventStart
+buttons=1
+event1=
+`,
+      ['EventStart.text,"Add the {c:TileNowhere} tile."'],
+      content({}),
+    )
+    built.start()
+
+    const view = built.view()
+    expect(view.kind === 'event' && view.text).toBe('Add the {c:TileNowhere} tile.')
+  })
+
+  it('replaces every marker in a line, not just the first', () => {
+    const built = localizedSession(
+      `[EventStart]
+trigger=EventStart
+buttons=1
+event1=
+
+[TileA]
+side=TileSideA
+
+[TileB]
+side=TileSideB
+`,
+      ['EventStart.text,"Add {c:TileA} and {c:TileB}."'],
+      content({ TileSideA: 'Town Square', TileSideB: 'Street' }),
+    )
+    built.start()
+
+    const view = built.view()
+    expect(view.kind === 'event' && view.text).toBe('Add Town Square and Street.')
+  })
+
+  it('does not let one marker swallow the next', () => {
+    // The C#'s pattern is `{c:(((?!{).)*?)}` — the inner guard is what stops a
+    // greedy match running from the first brace to the last.
+    const built = localizedSession(
+      `[EventStart]
+trigger=EventStart
+buttons=1
+event1=
+
+[TileA]
+side=TileSideA
+
+[TileB]
+side=TileSideB
+`,
+      ['EventStart.text,"{c:TileA}{c:TileB}"'],
+      content({ TileSideA: 'A', TileSideB: 'B' }),
+    )
+    built.start()
+
+    const view = built.view()
+    expect(view.kind === 'event' && view.text).toBe('AB')
+  })
+
+  it('names components on a button as well as in the prose', () => {
+    // `DialogWindow.cs:394` runs the same replacement over a label.
+    const built = localizedSession(
+      `[EventStart]
+trigger=EventStart
+buttons=1
+event1=
+
+[TileA]
+side=TileSideA
+`,
+      ['EventStart.text,"Choose."', 'EventStart.button1,"Enter the {c:TileA}"'],
+      content({ TileSideA: 'Town Square' }),
+    )
+    built.start()
+
+    const view = built.view()
+    expect(view.kind === 'event' && view.buttons[0]?.label).toBe('Enter the Town Square')
+  })
+
+  it('leaves text with no marker in it untouched', () => {
+    const built = localizedSession(
+      `[EventStart]
+trigger=EventStart
+buttons=1
+event1=
+`,
+      ['EventStart.text,"Nothing to replace here."'],
+      content({}),
+    )
+    built.start()
+
+    const view = built.view()
+    expect(view.kind === 'event' && view.text).toBe('Nothing to replace here.')
   })
 })

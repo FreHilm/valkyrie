@@ -42,9 +42,12 @@ import type { QuestBundle } from './questAdapter.js'
 import { QuestButtonData } from './QuestButtonData.js'
 import type { QuestComponent } from './QuestComponent.js'
 import {
+  CustomMonster,
   Puzzle as QuestPuzzle,
+  QItem,
   QuestEvent,
   Spawn as QuestSpawn,
+  Tile,
   Token as QuestToken,
 } from './QuestComponent.js'
 import { PuzzleCode, PuzzleImage, PuzzleSlide, PuzzleTower, restorePuzzle } from './puzzles.js'
@@ -212,6 +215,17 @@ export interface SessionOptions {
   slideLayouts?: ReadonlyMap<string, ContentFields>
   /** The parsed components, for the text and buttons an event shows. */
   components: ReadonlyMap<string, QuestComponent>
+  /**
+   * The translated name of a content entry, for `{c:...}` in a scenario's
+   * prose.
+   *
+   * `ReplaceComponentText` reads these out of `ContentData`, which this
+   * package deliberately does not depend on — a tile's side, a monster's type
+   * and an item's card all live there. Without it a marker falls back to the
+   * component's own section name, which is what the C# does for anything it
+   * cannot resolve either.
+   */
+  contentName?: (kind: 'tileSide' | 'monster' | 'item', name: string) => string | null
   gameType?: 'MoM' | 'D2E'
   localization?: Localization
   /** `Random.Range(0, n)`, injectable so a session can be replayed. */
@@ -1069,12 +1083,83 @@ export class QuestSession {
     const raw = component.text.translate(
       this.options.localization === undefined ? {} : { localization: this.options.localization },
     )
-    return outputSymbolReplace(raw, {
+    // Component names first, symbols after — `Event.GetText`'s own order. A
+    // name that resolves to text containing a symbol marker is then replaced
+    // in turn, which is the point of doing it this way round.
+    return outputSymbolReplace(this.replaceComponentText(raw), {
       vars: this.runtime.vars,
       gameType: this.gameType,
     })
       .split('\\n')
       .join('\n')
+  }
+
+  /**
+   * `Event.ReplaceComponentText`: turns `{c:Name}` into what that thing is
+   * called.
+   *
+   * A scenario writes "Add the {c:TileTownsquare} tile" rather than naming the
+   * tile, so the sentence keeps working when the tile is swapped or the text
+   * is translated. Unreplaced, the player reads the marker — which is what a
+   * scenario using them looked like here until now.
+   *
+   * What a name resolves to depends on what the component is, and the C#
+   * switches on its type: a tile becomes its side's name, a spawn becomes
+   * whichever monster it picked, an item becomes the card it turned into.
+   * Anything else is its own section name, as the C#'s `default` branch
+   * gives; a name the scenario never declares keeps its marker, because
+   * `TryGetValue` fails and the C# moves on without replacing.
+   *
+   * Public because a scenario's own screen elements need it too:
+   * `Quest.UI.GetText` runs the same replacement over `uitext`, and that text
+   * is assembled outside this class.
+   */
+  replaceComponentText(input: string): string {
+    if (!input.includes('{c:')) return input
+
+    // The C#'s own pattern. `(?!{)` stops a marker swallowing the one after
+    // it when two sit side by side.
+    return input.replace(/\{c:((?:(?!\{).)*?)\}/g, (marker, name: string) => {
+      const component = this.options.components.get(name)
+      // Not a component of this scenario: the C# leaves the marker alone
+      // rather than guessing, and so does this.
+      if (component === undefined) return marker
+      return this.componentText(name, component)
+    })
+  }
+
+  /** `getComponentText`: what one component is called, by what it is. */
+  private componentText(name: string, component: QuestComponent): string {
+    const named = (kind: 'tileSide' | 'monster' | 'item', key: string): string =>
+      this.options.contentName?.(kind, key) ?? name
+
+    if (component instanceof Tile) {
+      return component.tileSideName.length === 0 ? name : named('tileSide', component.tileSideName)
+    }
+    if (component instanceof CustomMonster) {
+      return component.monsterName.translate(
+        this.options.localization === undefined ? {} : { localization: this.options.localization },
+      )
+    }
+    if (component instanceof QuestSpawn) {
+      const chosen = this.monsterSelect.get(name)
+      if (chosen === undefined) return name
+      // A quest's own monster is named by the quest, not by the content.
+      const custom = this.options.components.get(chosen)
+      if (custom instanceof CustomMonster) {
+        return custom.monsterName.translate(
+          this.options.localization === undefined
+            ? {}
+            : { localization: this.options.localization },
+        )
+      }
+      return named('monster', chosen)
+    }
+    if (component instanceof QItem) {
+      const chosen = this.runtime.itemSelect.get(name)
+      return chosen === undefined ? name : named('item', chosen)
+    }
+    return name
   }
 
   /**
@@ -1179,7 +1264,10 @@ export class QuestSession {
     const raw = button.label.translate(
       this.options.localization === undefined ? {} : { localization: this.options.localization },
     )
-    return outputSymbolReplace(raw, { vars: this.runtime.vars, gameType: this.gameType })
+    return outputSymbolReplace(this.replaceComponentText(raw), {
+      vars: this.runtime.vars,
+      gameType: this.gameType,
+    })
   }
 }
 

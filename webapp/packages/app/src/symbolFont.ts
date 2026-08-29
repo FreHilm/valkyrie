@@ -26,14 +26,23 @@ import { combine } from '@valkyrie/platform'
 export const SYMBOL_FAMILY = 'Valkyrie Symbols'
 
 /**
- * The range the icons live in.
+ * The ranges the icons live in.
  *
- * Declared so the browser only consults the symbol family for the icons. The
- * same file carries a full set of letterforms, and those are registered
+ * `U+F200`–`F20F` is the dice and the expansion marks; `U+F480`–`F481` is
+ * where two more expansion marks were added later, and `characterMap` uses
+ * both — `{MAD27}` and `{MAD28}` are up there. Left out, those two draw as
+ * blank boxes while their neighbours draw as icons.
+ *
+ * Deliberately not the whole private-use area: the same file keeps its `ff`
+ * and `fi` ligatures at `U+FB00`, and those are typography rather than
+ * symbols.
+ *
+ * Declared at all so the browser only consults the symbol family for icons.
+ * The file also carries a full set of letterforms, and those are registered
  * separately under `TEXT_FAMILY` — two faces from one file, so a page can ask
  * for the icons without also getting the type.
  */
-export const SYMBOL_RANGE = 'U+F200-F20F'
+export const SYMBOL_RANGE = 'U+F200-F20F, U+F480-F481'
 
 /**
  * The same file, whole, for prose.

@@ -96,6 +96,15 @@ describe('loadSymbolFont', () => {
     expect(added).toHaveLength(0)
   })
 
+  it('covers the expansion marks that sit outside the main range', () => {
+    // `characterMap` puts {MAD27} and {MAD28} at U+F480 and U+F481, away from
+    // the rest. A range stopping at F20F leaves those two as blank boxes
+    // beside neighbours that draw.
+    expect(SYMBOL_RANGE).toContain('U+F480-F481')
+    // And stops short of the ligatures at U+FB00, which are type, not icons.
+    expect(SYMBOL_RANGE).not.toContain('FB0')
+  })
+
   it('confines the face to the icon range', async () => {
     // The same file carries a full set of letterforms. Without this the family
     // would quietly become the page's text font wherever it is named.

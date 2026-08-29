@@ -51,6 +51,7 @@ import {
   QuestRuntime,
   RoundControllerMoM,
   StringKey,
+  outputSymbolReplace,
   symbolNames,
 } from '@valkyrie/core'
 import type {
@@ -1440,10 +1441,21 @@ async function play(
         imageUrl,
         sizeOf: (path) => uiSizes.get(path) ?? sizes.get(path) ?? null,
         resolveQuestFile,
-        // `Quest.cs:2227` translates a UI element's text with
-        // `emptyIfNotFound`. An image-only element never declares a `uitext`,
-        // and without the flag its key is drawn in place of the picture.
-        text: (key) => key.translate({ emptyIfNotFound: true }),
+        // `Quest.UI.GetText`, all three steps of it. The translation takes
+        // `emptyIfNotFound` because an image-only element declares no
+        // `uitext` and its key would otherwise be drawn in place of the
+        // picture; then the component markers become names and the symbol
+        // markers become glyphs, exactly as an event's own text does.
+        text: (key) => {
+          const translated = key.translate({ emptyIfNotFound: true })
+          if (translated.length === 0) return translated
+          return outputSymbolReplace(session.replaceComponentText(translated), {
+            vars: session.runtime.vars,
+            gameType,
+          })
+            .split('\\n')
+            .join('\n')
+        },
       }),
     loadTexture: async (path: string, crop?: Crop) => {
       const file = resolveTexture(path) ?? path

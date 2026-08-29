@@ -35,13 +35,19 @@ import {
   bundleQuest,
   ContentData,
   ContentLoader,
+  DictionaryI18n,
+  fameLevel,
+  generateItemSelection,
   headlessContext,
+  ItemData,
+  QItem,
   loadQuestSections,
   MonsterData,
   QuestSession,
   readFromString,
   setLogSink,
   TILE_PIXELS_PER_SQUARE,
+  TileSideData,
   WEB_TEXTURE_EXTENSIONS,
 } from '@valkyrie/core'
 import { buildScene, sceneBounds } from '../../packages/ui/src/boardScene.ts'
@@ -65,6 +71,19 @@ const ctx = headlessContext({
 if (!existsSync(join(repo, 'unity/Assets/StreamingAssets/content/MoM'))) {
   console.log('milestone: no Mansions content — skipped')
   process.exit(0)
+}
+
+// The game's own strings, from the player's import. `loadContent` registers
+// these as `ffg`, and without them every name the game ships — monsters,
+// tiles, items — stays a raw `{ffg:KEY}`, which is what this harness used to
+// print in place of them.
+const importText = join(homedir(), '.cache/valkyrie-web-port/ffg/MoM-import/import/text')
+if (existsSync(importText)) {
+  const lines = []
+  for (const file of readdirSync(importText).filter((f) => /^Localization_en\.txt$/i.test(f))) {
+    lines.push(...readFileSync(join(importText, file), 'utf8').split(/\r?\n/))
+  }
+  if (lines.length > 0) ctx.localization.addDictionary('ffg', new DictionaryI18n(lines))
 }
 
 const content = new ContentData(ctx)
@@ -123,6 +142,22 @@ for (const f of readdirSync(dir).filter((f) => f.endsWith('.ini') && f !== 'ques
   loadQuestSections(readFromString(readFileSync(join(dir, f), 'utf8')), f, {}, components)
 }
 
+// The scenario's own strings, as `addQuestText` registers them. Without this
+// every line the engine produces is a raw `{qst:...}` key, and every check
+// that looks at text — the `{c:...}` markers below among them — passes by
+// looking at nothing.
+const language = 'English'
+const questText = readdirSync(dir).filter((f) => /^Localization\..*\.txt$/.test(f))
+const preferred =
+  questText.find((f) => f === `Localization.${language}.txt`) ?? questText[0] ?? null
+if (preferred !== null) {
+  const lines = readFileSync(join(dir, preferred), 'utf8').split(/\r?\n/)
+  const dictionary = new DictionaryI18n(lines)
+  dictionary.defaultLanguage = language
+  dictionary.currentLanguage = language
+  ctx.localization.addDictionary('qst', dictionary)
+}
+
 let seed = 20260825
 const random = (n) => (n <= 0 ? 0 : ((seed = (seed * 1664525 + 1013904223) >>> 0) >>> 9) % n)
 
@@ -131,16 +166,45 @@ const session = new QuestSession({
   components,
   contentMonsters,
   contentActivations,
+  // `{c:Name}` in a scenario's prose is replaced with what the thing is
+  // called, and a tile's name lives in the content rather than the quest.
+  contentName: (kind, name) => {
+    const type = kind === 'tileSide' ? TileSideData : kind === 'monster' ? MonsterData : ItemData
+    const data = content.tryGet(type, name)
+    return data === undefined ? null : data.name.translate()
+  },
   random,
+  localization: ctx.localization,
 })
 session.runtime.heroes.push(
   { heroName: 'HeroAshcanPete', activated: false },
   { heroName: 'HeroAgnesBaker', activated: false },
 )
+
+// `Quest`'s constructor calls `GenerateItemSelection` before any event runs,
+// and the app does it during party setup. Without it every `QItem` the
+// scenario names resolves to nothing: no card beside a dialog, and a
+// `{c:QItem...}` marker that reads as its own section name.
+const itemsById = new Map(content.getAll(ItemData))
+for (const [section, item] of generateItemSelection(
+  [...components.values()].filter((c) => c instanceof QItem),
+  {
+    items: itemsById,
+    fame: fameLevel((name) => session.runtime.vars.getValue(name)),
+    held: session.runtime.items(),
+    random,
+    warn: (message) => warnings.push(message),
+  },
+)) {
+  session.runtime.itemSelect.set(section, item)
+}
+
 session.start()
 
 const clicked = new Set()
 const seen = []
+/** `{c:...}` markers that reached the screen unreplaced. */
+const unresolved = new Set()
 let activations = 0
 let steps = 0
 let perTurn = 0
@@ -148,6 +212,13 @@ for (; steps < 4000; steps++) {
   const v = session.view()
   if (v.kind === 'event') {
     seen.push(v.name)
+    // A marker that survived is a marker the player would read. The engine
+    // replaces `{c:...}` before anything is drawn, so one showing up here is
+    // a component the scenario names and does not declare, or a resolver that
+    // stopped working.
+    for (const line of [v.text, ...v.buttons.map((x) => x.label)]) {
+      for (const marker of line.match(/\{c:[^}]*\}/g) ?? []) unresolved.add(`${v.name}: ${marker}`)
+    }
     const b = v.buttons.find((x) => !x.disabled)
     if (b === undefined) break
     session.press(b.index)
@@ -198,6 +269,8 @@ console.log(`round                   : ${session.runtime.vars.getValue('#round')
 console.log(`items held              : ${session.runtime.items().length}`)
 console.log(`log entries             : ${session.runtime.log.length}`)
 console.log(`quest ended             : ${ended}`)
+console.log(`unreplaced {c:} markers : ${unresolved.size}`)
+for (const marker of unresolved) console.log(`    ${marker}`)
 // --- what the board would draw ------------------------------------------
 // The real art layer, not a stand-in: this is what the app uses.
 const resolveTexture = ctx.resolveTextureFile
