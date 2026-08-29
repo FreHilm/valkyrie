@@ -70,9 +70,16 @@ function start() {
  * keyboard can reach a door. Anything asking about dialogs has to say it means
  * those, or it counts the board as well.
  */
+/**
+ * What a player can choose, which is not everything on screen.
+ *
+ * The board's pieces are buttons of their own, and a cancelable event now
+ * offers a way out that leads the row — pressing it would close the dialog
+ * without answering, which is the opposite of what these tests are doing.
+ */
 const buttons = (root: HTMLElement): HTMLButtonElement[] =>
   [...root.querySelectorAll<HTMLButtonElement>('button')].filter(
-    (b) => b.closest('.vk-board__pieces') === null,
+    (b) => b.closest('.vk-board__pieces') === null && !b.classList.contains('vk-event__cancel'),
   )
 const press = (root: HTMLElement, name: string): void => {
   const target = buttons(root).find((b) => b.textContent?.includes(name))

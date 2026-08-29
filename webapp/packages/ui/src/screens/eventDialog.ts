@@ -124,14 +124,26 @@ export function eventDialog(
       clear(actions)
       const quota = view.quota
       if (quota !== undefined) {
+        actions.classList.remove('vk-event__buttons--paired')
         drawQuota(actions, quota, view.buttons[0], options.rich ?? {})
         drawCancel(actions, view.onCancel, options.strings?.cancel)
         return
       }
+
+      // `CreateWindow` puts the cancel at x 11 and a single short choice at
+      // the right edge of the *same* row, and only drops it below when a label
+      // outgrows the default width. One choice beside one way out is the case
+      // that fits; anything more becomes the column the C# falls back to.
+      const paired = view.onCancel !== undefined && view.buttons.length === 1
+      actions.classList.toggle('vk-event__buttons--paired', paired)
+
+      // Cancel leads in that row, as its x of 11 puts it left of the choice.
+      // In the column it comes last, where `offsetCancel` drops it below them.
+      if (paired) drawCancel(actions, view.onCancel, options.strings?.cancel)
+
       for (const action of view.buttons) {
         const control = button(rawText(action.text), {
           onPress: action.onPress,
-          variant: 'primary',
           ...(action.disabled === true ? { disabled: true } : {}),
         })
         // A label carries symbols too: an action-costing button is written
@@ -141,7 +153,8 @@ export function eventDialog(
         setRichText(control, action.text, options.rich ?? {})
         actions.append(control)
       }
-      drawCancel(actions, view.onCancel, options.strings?.cancel)
+
+      if (!paired) drawCancel(actions, view.onCancel, options.strings?.cancel)
     },
     clear: () => {
       clear(figure)
@@ -167,13 +180,7 @@ export function eventDialog(
  */
 function drawCancel(into: HTMLElement, onCancel: (() => void) | undefined, text?: Text): void {
   if (onCancel === undefined) return
-  into.append(
-    button(text ?? rawText('Cancel'), {
-      onPress: onCancel,
-      variant: 'secondary',
-      class: 'vk-event__cancel',
-    }),
-  )
+  into.append(button(text ?? rawText('Cancel'), { onPress: onCancel, class: 'vk-event__cancel' }))
 }
 
 /**

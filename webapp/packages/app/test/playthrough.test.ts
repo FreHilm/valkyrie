@@ -95,13 +95,22 @@ text=You take the idol and run.
 operations=$end,=,1
 `
 
-/** Everything a player can press right now, in the order they would find it. */
+/**
+ * Everything a player can press right now, in the order they would find it.
+ *
+ * The way out of a cancelable event is deliberately not among them. A token's
+ * dialog leads with Cancel, and a driver that presses whatever comes first
+ * opens the same door and closes it again forever — which is a stuck quest
+ * that looks like a busy one. Someone playing to the end answers instead.
+ */
 function actions(root: HTMLElement) {
   const enabled = (selector: string) =>
     [...root.querySelectorAll<HTMLButtonElement>(selector)].filter((b) => !b.disabled)
   return {
     puzzle: enabled('.vk-puzzle button'),
-    overlay: enabled('.vk-play__overlay button'),
+    overlay: enabled('.vk-play__overlay button').filter(
+      (b) => !b.classList.contains('vk-event__cancel'),
+    ),
     pieces: enabled('.vk-board__pieces button'),
     controls: enabled('.vk-play__controls button'),
   }

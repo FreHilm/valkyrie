@@ -14,7 +14,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { MemoryFileSystem, StoragePaths, combine } from '@valkyrie/platform'
-import { SYMBOL_FAMILY, SYMBOL_RANGE, loadSymbolFont } from '../src/symbolFont.js'
+import { SYMBOL_FAMILY, SYMBOL_RANGE, TEXT_FAMILY, loadSymbolFont } from '../src/symbolFont.js'
 
 const paths = new StoragePaths({ appData: '/appdata', content: '/content', temp: '/tmp' }, 'MoM')
 const fontsPath = combine(paths.importPath, 'fonts')
@@ -62,10 +62,38 @@ const SOME_FONT = Uint8Array.from([0x00, 0x01, 0x00, 0x00, 1, 2, 3, 4])
 
 describe('loadSymbolFont', () => {
   it('loads the face the game draws its icons with', async () => {
-    const { loaded, added } = await withFont({ 'MADGaramondPro.ttf': SOME_FONT })
+    const { loaded } = await withFont({ 'MADGaramondPro.ttf': SOME_FONT })
 
     expect(loaded).toBe(true)
-    expect(added).toHaveLength(1)
+  })
+
+  it('registers the icons and the letterforms as two faces', async () => {
+    // One file, two families. The icons are confined to their range so a page
+    // can ask for them without also getting the type; the type is registered
+    // whole, because it is what the game sets its dialogs in.
+    const { made, added } = await withFont({ 'MADGaramondPro.ttf': SOME_FONT })
+
+    expect(added).toHaveLength(2)
+    expect(made.map((f) => f.family)).toEqual([SYMBOL_FAMILY, TEXT_FAMILY])
+    expect(made[0]?.descriptors.unicodeRange).toBe(SYMBOL_RANGE)
+    // Unrestricted: a range here would leave the prose in the fallback.
+    expect(made[1]?.descriptors.unicodeRange).toBeUndefined()
+  })
+
+  it('lets prose show in the fallback while the face arrives', async () => {
+    // `block` on the icons, because a blank box says nothing; `swap` on the
+    // text, because a sentence in the wrong serif still reads.
+    const { made } = await withFont({ 'MADGaramondPro.ttf': SOME_FONT })
+
+    expect(made[0]?.descriptors.display).toBe('block')
+    expect(made[1]?.descriptors.display).toBe('swap')
+  })
+
+  it('registers neither face when the file will not parse', async () => {
+    const { loaded, added } = await withFont({ 'MADGaramondPro.ttf': SOME_FONT }, { fails: true })
+
+    expect(loaded).toBe(false)
+    expect(added).toHaveLength(0)
   })
 
   it('confines the face to the icon range', async () => {

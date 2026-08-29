@@ -28,11 +28,23 @@ export const SYMBOL_FAMILY = 'Valkyrie Symbols'
 /**
  * The range the icons live in.
  *
- * Declared so the browser only consults this face for the icons: the same file
- * carries a full set of letterforms, and without this it would quietly become
- * the page's text font wherever the family is named.
+ * Declared so the browser only consults the symbol family for the icons. The
+ * same file carries a full set of letterforms, and those are registered
+ * separately under `TEXT_FAMILY` — two faces from one file, so a page can ask
+ * for the icons without also getting the type.
  */
 export const SYMBOL_RANGE = 'U+F200-F20F'
+
+/**
+ * The same file, whole, for prose.
+ *
+ * `MoMGameType.GetFont` hands MADGaramondPro to every piece of text in the
+ * Unity build, and it is what the game's dialogs are set in. Registering it
+ * unrestricted is what lets the port's dialogs look like the game's rather
+ * than like a fallback serif — and it costs nothing extra, because the file is
+ * already loaded for the icons.
+ */
+export const TEXT_FAMILY = 'Valkyrie Garamond'
 
 /**
  * The faces worth trying, best first.
@@ -53,7 +65,12 @@ export interface SymbolFontOptions {
 }
 
 /**
- * Loads the symbol font, and says whether the icons can now be drawn.
+ * Loads the game's font, and says whether it is there.
+ *
+ * Registers it twice from the one file: the icons under `SYMBOL_FAMILY`,
+ * confined to their range, and the letterforms under `TEXT_FAMILY` for prose.
+ * The split is what lets a page take the icons without the type — the icons
+ * have no substitute, while the type merely looks better than a fallback.
  *
  * Never throws: a missing import is the ordinary case on a first run, and a
  * font that will not parse is a broken import rather than a broken app. Either
@@ -74,14 +91,23 @@ export async function loadSymbolFont(options: SymbolFontOptions): Promise<boolea
       const construct =
         options.construct ??
         ((family, source, descriptors) => new FontFace(family, source, descriptors))
-      const face = construct(SYMBOL_FAMILY, bytes as unknown as BufferSource, {
+      const fonts = options.fonts ?? document.fonts
+
+      const symbols = construct(SYMBOL_FAMILY, bytes as unknown as BufferSource, {
         unicodeRange: SYMBOL_RANGE,
         // These are icons standing in for words: better a moment of nothing
         // than a flash of a blank box that is then replaced.
         display: 'block',
       })
-      await face.load()
-      ;(options.fonts ?? document.fonts).add(face)
+      await symbols.load()
+      fonts.add(symbols)
+
+      // `swap` rather than `block`: prose is readable in the fallback while
+      // this arrives, so there is nothing to gain by hiding it first.
+      const text = construct(TEXT_FAMILY, bytes as unknown as BufferSource, { display: 'swap' })
+      await text.load()
+      fonts.add(text)
+
       return true
     } catch {
       // A file that is there but will not parse is worth trying the next name

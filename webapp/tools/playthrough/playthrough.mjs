@@ -136,7 +136,12 @@ const STEP = `(() => {
     return ['puzzle', chosen.textContent]
   }
 
-  const overlay = enabled('.vk-play__overlay button')
+  // Not the way out of a cancelable event. A token's dialog leads with Cancel,
+  // and pressing whatever comes first opens the same door and closes it again
+  // forever — a stuck quest that looks like a busy one.
+  const overlay = enabled('.vk-play__overlay button').filter(
+    (b) => !b.classList.contains('vk-event__cancel'),
+  )
   if (overlay.length) {
     // A quota event asks for a number, and its spinner carries a '+' just as
     // a monster's health tracker does. Pressing the wrong one dials a counter

@@ -434,9 +434,9 @@ describe('eventDialog cancel and icon', () => {
     expect(dialog.element.querySelector('.vk-event__cancel')).toBeNull()
   })
 
-  it('draws Cancel last, after the choices', () => {
-    // It is the way out, not one of the options, and reading it first would
-    // make it look like the expected answer.
+  it('sets one choice beside the way out, with Cancel leading', () => {
+    // `CreateWindow` leaves the cancel at x 11 and a single short choice at
+    // the right edge of the same row, so Cancel reads first.
     const dialog = eventDialog()
     dialog.show({
       text: 'Choose.',
@@ -447,7 +447,73 @@ describe('eventDialog cancel and icon', () => {
     const labels = [...dialog.element.querySelectorAll('.vk-event__buttons button')].map(
       (b) => b.textContent,
     )
-    expect(labels).toEqual(['Open it', 'Cancel'])
+    expect(labels).toEqual(['Cancel', 'Open it'])
+    expect(
+      dialog.element
+        .querySelector('.vk-event__buttons')
+        ?.classList.contains('vk-event__buttons--paired'),
+    ).toBe(true)
+  })
+
+  it('stacks several choices and drops Cancel below them', () => {
+    // With more than one the C# centres the column and puts the cancel under
+    // the lot, at `offset + 2.5 * buttons.Count`.
+    const dialog = eventDialog()
+    dialog.show({
+      text: 'Choose.',
+      buttons: [
+        { text: 'Ask about the house', onPress: vi.fn() },
+        { text: 'Ask about the storm', onPress: vi.fn() },
+      ],
+      onCancel: vi.fn(),
+    })
+
+    const labels = [...dialog.element.querySelectorAll('.vk-event__buttons button')].map(
+      (b) => b.textContent,
+    )
+    expect(labels).toEqual(['Ask about the house', 'Ask about the storm', 'Cancel'])
+    expect(
+      dialog.element
+        .querySelector('.vk-event__buttons')
+        ?.classList.contains('vk-event__buttons--paired'),
+    ).toBe(false)
+  })
+
+  it('does not pair a lone choice that has no way out', () => {
+    // A plain event's Continue stands alone; there is nothing to sit beside.
+    const dialog = eventDialog()
+    dialog.show({ text: 'Read on.', buttons: [{ text: 'Continue', onPress: vi.fn() }] })
+
+    expect(
+      dialog.element
+        .querySelector('.vk-event__buttons')
+        ?.classList.contains('vk-event__buttons--paired'),
+    ).toBe(false)
+  })
+
+  it('stops pairing when the next event offers more choices', () => {
+    // One element reused for every event: a row left behind would lay the
+    // next event's four choices out side by side.
+    const dialog = eventDialog()
+    dialog.show({
+      text: 'Choose.',
+      buttons: [{ text: 'Open it', onPress: vi.fn() }],
+      onCancel: vi.fn(),
+    })
+    dialog.show({
+      text: 'Choose again.',
+      buttons: [
+        { text: 'Left', onPress: vi.fn() },
+        { text: 'Right', onPress: vi.fn() },
+      ],
+      onCancel: vi.fn(),
+    })
+
+    expect(
+      dialog.element
+        .querySelector('.vk-event__buttons')
+        ?.classList.contains('vk-event__buttons--paired'),
+    ).toBe(false)
   })
 
   it('keeps the way out on an event that asks for a number', () => {

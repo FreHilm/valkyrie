@@ -33,6 +33,27 @@
 
   --vk-font-body: 'Columbus MT', Palatino, 'Palatino Linotype', Georgia, serif;
   --vk-font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /*
+   * The face the game itself sets its text in, when it is there.
+   *
+   * `symbolFont.ts` points this at the family it registers from the player's
+   * own import; until then it is the body stack, which is a serif of roughly
+   * the right colour and the wrong details.
+   */
+  --vk-font-game: var(--vk-font-body);
+
+  /*
+   * The dialog palette, which does not follow the viewer's theme.
+   *
+   * A quest's dialogs sit over the board, and the board is dark in every
+   * theme — a light panel there would be a hole in the picture. These are the
+   * published app's colours: near-black behind a pewter rule, with cream text
+   * and a warm gold for the words a player presses.
+   */
+  --vk-dialog-ink: #efe7d7;
+  --vk-dialog-rule: #b9b3a6;
+  --vk-dialog-rule-soft: rgb(185 179 166 / 45%);
+  --vk-dialog-gold: #d9b45e;
 
   --vk-radius: calc(var(--u) * 0.12);
   --vk-gap: calc(var(--u) * 0.5);
@@ -425,7 +446,24 @@ body {
   max-width: calc(var(--u) * 26);
 }
 /*
- * The picture and the words, side by side.
+ * The event dialog is two pieces, not one.
+ *
+ * `CreateWindow` gives the text its own bordered box and then places the
+ * buttons *below* it, at their own offsets — they are not inside the frame.
+ * So this one overlay child drops the panel chrome it shares with the others
+ * and hands it to the text box instead.
+ */
+.vk-play__overlay > .vk-event {
+  background: none;
+  border: 0;
+  padding: 0;
+  box-shadow: none;
+  overflow: visible;
+  gap: 0;
+}
+
+/*
+ * The picture and the words, side by side, inside the frame.
  *
  * `DialogWindow.DrawItem` puts the card at x -21 with the text box running
  * from -14, so the art sits to the left of the words rather than above them.
@@ -434,9 +472,20 @@ body {
  */
 .vk-event__main {
   display: flex;
-  align-items: flex-start;
-  gap: calc(var(--u) * 0.6);
+  align-items: center;
+  gap: calc(var(--u) * 0.7);
   flex-wrap: wrap;
+  background: rgb(6 5 8 / 88%);
+  border: 1px solid var(--vk-dialog-rule);
+  padding: calc(var(--u) * 0.7) calc(var(--u) * 0.8);
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 90%),
+    inset 0 0 0 2px var(--vk-dialog-rule-soft),
+    0 calc(var(--u) * 0.3) calc(var(--u) * 1.2) rgb(0 0 0 / 65%);
+}
+/* Nothing to frame when the event has neither words nor a picture. */
+.vk-event__main:empty {
+  display: none;
 }
 .vk-event__image {
   flex: 0 0 auto;
@@ -450,6 +499,16 @@ body {
   gap: calc(var(--u) * 0.4);
   flex: 1 1 calc(var(--u) * 12);
   min-width: 0;
+}
+/* The prose, in the game's face at the game's size. Left-aligned: the
+   published app centres only a line or two and ranges anything longer, and a
+   centred paragraph is harder to read for no gain. */
+.vk-event__text .vk-text {
+  font-family: var(--vk-font-game);
+  font-size: calc(var(--u) * 0.92);
+  line-height: 1.42;
+  color: var(--vk-dialog-ink);
+  text-shadow: 0 1px 2px rgb(0 0 0 / 70%);
 }
 .vk-event__img {
   max-width: 100%;
@@ -467,10 +526,13 @@ body {
  */
 .vk-event__icon {
   display: block;
-  width: calc(var(--u) * 4.5);
-  height: calc(var(--u) * 4.5);
+  width: calc(var(--u) * 3.6);
+  height: calc(var(--u) * 3.6);
   overflow: hidden;
   position: relative;
+  /* The token art is already a disc; this only keeps a square source from
+     sitting square against a round one. */
+  border-radius: 50%;
 }
 .vk-event__icon-art {
   width: 100%;
@@ -479,16 +541,63 @@ body {
   display: block;
 }
 
+/*
+ * The choices, as the game lays them out.
+ *
+ * `DialogWindow` stacks them: each button is 2 units tall at 2.5 apart, and
+ * with a label too long for the default 8 units they are centred and the
+ * cancel drops below the lot. That column is what this is — full width,
+ * centred label, one per line.
+ *
+ * The exception is the short single choice, where the C# leaves the cancel at
+ * x 11 and the button at the right edge on the *same* row. `--vk-paired` is
+ * set by the dialog when that case applies.
+ */
 .vk-event__buttons {
   display: flex;
-  flex-wrap: wrap;
-  gap: calc(var(--u) * 0.3);
-  align-items: center;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.35);
+  margin-top: calc(var(--u) * 0.6);
 }
-/* Pushed to the end of the row: it is the way out, not a choice among the
-   others, and `DialogWindow` sets it apart for the same reason. */
+.vk-event__buttons--paired {
+  flex-direction: row;
+}
+.vk-event__buttons--paired > * {
+  flex: 1 1 0;
+}
+
+/*
+ * A choice: black behind a pale rule, its label centred in the game's own
+ * face. Not the app's accent — a quest's dialog is the game's picture, and a
+ * coloured button in the middle of it reads as a web page.
+ */
+.vk-event__buttons .vk-button {
+  width: 100%;
+  background: rgb(4 3 6 / 92%);
+  border: 1px solid var(--vk-dialog-rule);
+  border-radius: 0;
+  color: var(--vk-dialog-ink);
+  font-family: var(--vk-font-game);
+  font-size: calc(var(--u) * 0.82);
+  letter-spacing: 0.01em;
+  text-align: center;
+  justify-content: center;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 80%);
+  min-height: max(calc(var(--u) * 1.9), 44px);
+}
+.vk-event__buttons .vk-button:hover:not(:disabled) {
+  border-color: var(--vk-dialog-gold);
+  color: var(--vk-dialog-gold);
+}
+.vk-event__buttons .vk-button:disabled {
+  opacity: 1;
+  color: rgb(239 231 215 / 38%);
+  border-color: rgb(185 179 166 / 35%);
+}
+/* Set apart from the choices, as `DialogWindow` sets it apart: it is the way
+   out rather than one of them. */
 .vk-event__cancel {
-  margin-left: auto;
+  color: rgb(239 231 215 / 78%);
 }
 
 /* ---- hero selection ---- */
@@ -1153,18 +1262,64 @@ body {
 .vk-play__overlay:empty {
   display: none;
 }
-/* The panel itself is what takes the clicks; the rest of the layer is board. */
+/*
+ * The panel itself is what takes the clicks; the rest of the layer is board.
+ *
+ * 28 units wide because that is the width `DialogWindow` gives its text box,
+ * and the whole play screen is sized in the C#'s own units.
+ *
+ * The look is the game's: a near-black panel behind a pale double rule, with
+ * the board still visible through it. Valkyrie's own `UIElementBorder` draws
+ * four flat white lines and nothing else — the framed, layered treatment is
+ * the published app's, which is what a player recognises, so this follows that
+ * rather than the C#'s own chrome.
+ */
 .vk-play__overlay > * {
   pointer-events: auto;
   width: min(100%, calc(var(--u) * 28));
   max-height: 100%;
   overflow-y: auto;
-  background: var(--vk-surface);
-  border: 1px solid var(--vk-rule);
-  border-radius: var(--vk-radius);
-  padding: var(--vk-gap);
-  box-shadow: 0 calc(var(--u) * 0.2) calc(var(--u) * 0.8) rgb(0 0 0 / 45%);
+  background: rgb(6 5 8 / 88%);
+  color: var(--vk-dialog-ink);
+  /* Two rules, a hair apart: the outer edge and an inset line, which is what
+     gives the frame depth without any artwork behind it. */
+  border: 1px solid var(--vk-dialog-rule);
+  border-radius: 0;
+  padding: calc(var(--u) * 0.7) calc(var(--u) * 0.8);
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 90%),
+    inset 0 0 0 2px var(--vk-dialog-rule-soft),
+    0 calc(var(--u) * 0.3) calc(var(--u) * 1.2) rgb(0 0 0 / 65%);
 }
+/*
+ * Everything inside a dialog follows the dialog's palette, not the viewer's.
+ *
+ * `.vk-text` names `--vk-text`, which is near-black under a light theme — on
+ * this ground that is black on black. The panel is dark in every theme because
+ * the board under it is, so the text on it has to be too.
+ */
+.vk-play__overlay .vk-text,
+.vk-play__overlay .vk-list__row,
+.vk-play__overlay dt,
+.vk-play__overlay dd {
+  color: var(--vk-dialog-ink);
+}
+.vk-play__overlay .vk-list__row {
+  background: rgb(255 255 255 / 4%);
+}
+.vk-play__overlay .vk-button {
+  background: rgb(4 3 6 / 92%);
+  border-color: var(--vk-dialog-rule);
+  color: var(--vk-dialog-ink);
+}
+.vk-play__overlay .vk-button:hover:not(:disabled) {
+  border-color: var(--vk-dialog-gold);
+  color: var(--vk-dialog-gold);
+}
+.vk-play__overlay .vk-button--primary {
+  background: rgb(12 9 14 / 94%);
+}
+
 /*
  * The monster list, `MonsterCanvas`: a column of icons against the right edge
  * of the screen, each one opening that monster's dialog. A monster that has

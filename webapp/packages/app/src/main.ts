@@ -116,7 +116,7 @@ import type { QuestEntry } from './library.js'
 import { monsterProfile, questArt, questUiElements, tileImages } from './questArt.js'
 import { monsterDialogView } from './monsterView.js'
 import { puzzleRenderer } from './puzzleView.js'
-import { SYMBOL_FAMILY, loadSymbolFont } from './symbolFont.js'
+import { SYMBOL_FAMILY, TEXT_FAMILY, loadSymbolFont } from './symbolFont.js'
 import { defaultQuestMusic, questAudio } from './questAudio.js'
 import { setUpParty } from './partySetup.js'
 import { formatBytes, storageReport } from './storage.js'
@@ -1229,8 +1229,14 @@ async function play(
   // and simply is not what the game looks like.
   const symbolFont = await loadSymbolFont({ fs, paths: storage })
   // Named only once there is a face behind it, so the stylesheet never points
-  // at a family that does not exist. `symbolFont.ts` owns the name.
-  if (symbolFont) root.style.setProperty('--vk-symbol-font', `'${SYMBOL_FAMILY}'`)
+  // at a family that does not exist. `symbolFont.ts` owns the names.
+  if (symbolFont) {
+    root.style.setProperty('--vk-symbol-font', `'${SYMBOL_FAMILY}'`)
+    // The face the game sets its dialogs in. Scoped to the play screen rather
+    // than the whole app: the menus are the port's own design and were built
+    // against their own stack, while a quest's prose is the game's.
+    root.style.setProperty('--vk-font-game', `'${TEXT_FAMILY}'`)
+  }
   /** Content the scenario asked for and this player does not have. */
   const missing = new Set<string>()
   // Hoisted rather than built inline: the board draws from it, and so does the
