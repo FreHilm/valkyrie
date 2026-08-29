@@ -41,7 +41,12 @@ import type { MonsterTypeView, RoundRequest } from './RoundController.js'
 import type { QuestBundle } from './questAdapter.js'
 import { QuestButtonData } from './QuestButtonData.js'
 import type { QuestComponent } from './QuestComponent.js'
-import { Puzzle as QuestPuzzle, QuestEvent, Spawn as QuestSpawn } from './QuestComponent.js'
+import {
+  Puzzle as QuestPuzzle,
+  QuestEvent,
+  Spawn as QuestSpawn,
+  Token as QuestToken,
+} from './QuestComponent.js'
 import { PuzzleCode, PuzzleImage, PuzzleSlide, PuzzleTower, restorePuzzle } from './puzzles.js'
 import type { PuzzleState } from './puzzles.js'
 import type { ContentFields } from '../content/types.js'
@@ -146,6 +151,15 @@ export type SessionView =
        * highlight, and beside the dialog when it is not.
        */
       grantedItem?: string
+      /**
+       * Whether the player may close this without answering it.
+       *
+       * True for a door, a token or a scenario's own UI element — the things
+       * you click on the board, which the C# marks cancelable "because you can
+       * select then cancel". False for an event the quest raised itself, which
+       * has to be answered.
+       */
+      cancelable: boolean
     }
   | { kind: 'puzzle'; puzzle: ActivePuzzle }
   | { kind: 'activation'; monster: MonsterInstance; activation: ActivationInstance }
@@ -370,6 +384,7 @@ export class QuestSession {
         ...(quota === null ? {} : { quota }),
         ...(event?.highlight === true ? { highlight: { ...event.location } } : {}),
         ...(granted === null ? {} : { grantedItem: granted }),
+        cancelable: event?.cancelable === true,
       }
     }
 
@@ -1074,6 +1089,11 @@ export class QuestSession {
     const component = this.options.components.get(name)
     if (!(component instanceof QuestEvent)) return []
 
+    // `GetButtons` returns nothing at all when `ButtonsPresent` says so, which
+    // is how a token whose choices all lead nowhere ends up offering only
+    // Cancel rather than a Continue that does the same thing less clearly.
+    if (!this.buttonsPresent(component)) return []
+
     const result: SessionButton[] = []
     component.buttons.forEach((button: QuestButtonData, index: number) => {
       const failed = button.hasCondition && !this.runtime.vars.test(button.condition)
@@ -1088,10 +1108,71 @@ export class QuestSession {
     // With nothing enabled the player would be trapped, so the C# adds a
     // Continue that simply ends the event. Its index is past the real buttons,
     // which `endEvent` reads as "no chained event".
-    if (!component.buttons.some((button) => this.isButtonEnabled(button))) {
+    //
+    // Except on a token: `EventManager.Token` is constructed with
+    // `addsFallbackContinueButton = false`, because a token already has a way
+    // out that costs nothing — the Cancel button every cancelable event gets.
+    if (
+      !(component instanceof QuestToken) &&
+      !component.buttons.some((button) => this.isButtonEnabled(button))
+    ) {
       result.push({ label: CONTINUE_LABEL, index: component.buttons.length, disabled: false })
     }
     return result
+  }
+
+  /**
+   * `Event.ButtonsPresent`: whether this event has anything worth pressing.
+   *
+   * Only asked of a cancelable event — a door, a token or a scenario's own UI
+   * element. Anything else must have buttons, because Cancel is the only other
+   * way out of a dialog and those do not offer one.
+   *
+   * "Worth pressing" means at least one button leads to an event that is not
+   * disabled. A name that is not an event at all may be a handover to another
+   * scenario, which counts; a name that is neither is a fault in the scenario,
+   * and the C# stops looking at the first one rather than checking the rest.
+   */
+  private buttonsPresent(component: QuestEvent): boolean {
+    if (!component.cancelable) return true
+
+    for (const button of component.buttons) {
+      for (const name of button.eventNames) {
+        if (!this.options.components.has(name)) {
+          // Not an event: it may be another scenario. The C# registers the
+          // handover and answers yes on the spot, without asking whether a
+          // quest file can be disabled — it cannot.
+          if (this.events.isQuestTransition(name)) return true
+          this.runtime.log.add(new LogEntry(`Warning: Missing event called: ${name}`, true))
+          return false
+        }
+        if (!this.events.isDisabled(name)) return true
+      }
+    }
+    return false
+  }
+
+  /**
+   * `DialogWindow.onCancel`: the player put the token back down.
+   *
+   * Nothing the event declares runs — no components added or removed, no
+   * variables set, no chained event. The dialog closes, the event is cleared,
+   * and whatever was waiting behind it gets its turn.
+   *
+   * Returns false when the current event is not one that can be cancelled, so
+   * a caller cannot close a dialog the scenario meant to be answered.
+   */
+  cancel(): boolean {
+    const current = this.events.current
+    if (current === null) return false
+    const component = this.options.components.get(current.sectionName)
+    if (!(component instanceof QuestEvent) || !component.cancelable) return false
+
+    this.pending = null
+    this.events.current = null
+    this.events.triggerEvent()
+    this.settle()
+    return true
   }
 
   private buttonLabel(button: QuestButtonData): string {

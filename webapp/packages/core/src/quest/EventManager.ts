@@ -226,6 +226,17 @@ export class EventManager {
     return true
   }
 
+  /**
+   * Whether this name was resolved to another scenario rather than an event.
+   *
+   * `ButtonsPresent` treats a handover as something worth pressing, so a token
+   * whose only button starts the next scenario is not mistaken for one that
+   * leads nowhere.
+   */
+  isQuestTransition(name: string): boolean {
+    return this.questTransitions.has(name) || this.context.isQuestTransition?.(name) === true
+  }
+
   /** Whether an event's var tests currently fail. `Event.Disabled()`. */
   isDisabled(name: string): boolean {
     if (this.questTransitions.has(name)) return false

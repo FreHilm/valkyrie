@@ -1127,3 +1127,216 @@ event1=
     expect(owed(quest)).toContain(MoMPhase.mythos)
   })
 })
+
+/**
+ * Cancelling: `DialogWindow.onCancel` and `Event.ButtonsPresent`.
+ *
+ * The C# marks doors, tokens and UI elements cancelable "because you can
+ * select then cancel" — clicking a thing on the board is not a commitment. An
+ * event the quest raised itself has to be answered, and offers no way out.
+ */
+describe('cancelling an event', () => {
+  const TOKEN_QUEST = `[EventStart]
+trigger=EventStart
+buttons=1
+event1=
+text=The hall waits.
+add=TokenDesk
+
+[TokenDesk]
+buttons=1
+event1=EventSearched
+text=A desk, its drawers shut.
+
+[EventSearched]
+buttons=1
+event1=
+text=You find a key.
+operations=$found,=,1
+`
+
+  /** Opens the token's dialog, as clicking it on the board does. */
+  function atToken(ini = TOKEN_QUEST): QuestSession {
+    const built = session(ini)
+    built.start()
+    built.press(0)
+    built.activate('TokenDesk')
+    return built
+  }
+
+  it('offers a way out of a token, and not out of a plain event', () => {
+    const built = session(TOKEN_QUEST)
+    built.start()
+
+    const opening = built.view()
+    expect(opening.kind === 'event' && opening.cancelable).toBe(false)
+
+    built.press(0)
+    built.activate('TokenDesk')
+    const token = built.view()
+    expect(token.kind === 'event' && token.cancelable).toBe(true)
+  })
+
+  it('closes without running anything the event declares', () => {
+    const built = atToken()
+
+    expect(built.cancel()).toBe(true)
+    expect(built.view().kind).toBe('board')
+    // The chained event never ran, so nothing it sets was set.
+    expect(built.runtime.vars.getValue('$found')).toBe(0)
+    expect(built.events.history).not.toContain('EventSearched')
+  })
+
+  it('leaves the token on the board to be tried again', () => {
+    // This is the whole point of cancelling rather than answering: the thing
+    // is still there, and a player who opened it by accident has lost nothing.
+    const built = atToken()
+    built.cancel()
+
+    expect(built.runtime.boardItems().some((item) => item.name === 'TokenDesk')).toBe(true)
+    built.activate('TokenDesk')
+    expect(built.view().kind).toBe('event')
+  })
+
+  it('refuses to cancel an event that has to be answered', () => {
+    const built = session(TOKEN_QUEST)
+    built.start()
+
+    expect(built.cancel()).toBe(false)
+    expect(built.view().kind).toBe('event')
+  })
+
+  it('refuses to cancel when nothing is showing', () => {
+    const built = session(TOKEN_QUEST)
+
+    expect(built.cancel()).toBe(false)
+  })
+
+  it('gives a token no Continue to press, because Cancel is the way out', () => {
+    // `EventManager.Token` is built with `addsFallbackContinueButton = false`.
+    // A Continue here would end the event and consume the token, which is not
+    // what a player who cannot act on it means to do.
+    const built = atToken(`[EventStart]
+trigger=EventStart
+buttons=1
+event1=
+add=TokenDesk
+
+[TokenDesk]
+buttons=1
+event1=EventLocked
+text=A desk.
+
+[EventLocked]
+vartests=VarOperation:$key,>,0
+buttons=1
+event1=
+text=Unlocked.
+`)
+
+    const view = built.view()
+    expect(view.kind === 'event' && view.buttons).toEqual([])
+  })
+
+  it('gives a token no Continue even when its one choice is greyed out', () => {
+    // The case the Token rule really decides: the button leads somewhere real,
+    // so `ButtonsPresent` says yes and the button is drawn — but its condition
+    // fails, so nothing is pressable. A plain event would grow a Continue
+    // here; a token must not, because Cancel is already the way out and a
+    // Continue would end the event and consume the token instead.
+    const built = atToken(`[EventStart]
+trigger=EventStart
+buttons=1
+event1=
+add=TokenDesk
+
+[TokenDesk]
+buttons=1
+event1=EventOpen,$key,>,0
+text=A locked desk.
+
+[EventOpen]
+buttons=1
+event1=
+text=It opens.
+`)
+
+    const view = built.view()
+    expect(view.kind === 'event' && view.buttons.map((b) => b.disabled)).toEqual([true])
+    expect(view.kind === 'event' && view.buttons.map((b) => b.label)).not.toContain('Continue')
+  })
+
+  it('still gives a plain event its Continue', () => {
+    // The fallback exists so a player is never trapped; only a cancelable
+    // event has another way out.
+    const built = session(`[EventOnly]
+trigger=EventStart
+buttons=1
+event1=EventDisabled
+text=Nothing to do.
+
+[EventDisabled]
+vartests=VarOperation:$never,>,0
+buttons=1
+event1=
+`)
+    built.start()
+
+    const view = built.view()
+    expect(view.kind === 'event' && view.buttons.map((b) => b.label)).toHaveLength(1)
+  })
+
+  it('keeps the buttons of a token whose choice leads somewhere', () => {
+    const view = atToken().view()
+
+    expect(view.kind === 'event' && view.buttons).toHaveLength(1)
+  })
+
+  it('counts a handover to another scenario as somewhere to go', () => {
+    // `ButtonsPresent` treats a name that is a quest file rather than an event
+    // as valid, so a token whose only button starts the next scenario is not
+    // mistaken for one that leads nowhere.
+    const built = session(
+      `[EventStart]
+trigger=EventStart
+buttons=1
+event1=
+add=TokenGate
+
+[TokenGate]
+buttons=1
+event1=next/quest.ini
+text=A gate.
+`,
+      () => 0,
+      (name) => name === 'next/quest.ini',
+    )
+    built.start()
+    built.press(0)
+    built.activate('TokenGate')
+
+    expect(built.view().kind === 'event' && built.view()).toMatchObject({ cancelable: true })
+    const view = built.view()
+    expect(view.kind === 'event' && view.buttons).toHaveLength(1)
+  })
+
+  it('says which event was missing when a token points at nothing', () => {
+    const built = atToken(`[EventStart]
+trigger=EventStart
+buttons=1
+event1=
+add=TokenDesk
+
+[TokenDesk]
+buttons=1
+event1=EventGone
+text=A desk.
+`)
+
+    const view = built.view()
+    expect(view.kind === 'event' && view.buttons).toEqual([])
+    expect(built.runtime.log.toArray().map((e) => e.entry)).toContain(
+      'Warning: Missing event called: EventGone',
+    )
+  })
+})

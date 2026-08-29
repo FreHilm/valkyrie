@@ -1233,6 +1233,25 @@ async function play(
   if (symbolFont) root.style.setProperty('--vk-symbol-font', `'${SYMBOL_FAMILY}'`)
   /** Content the scenario asked for and this player does not have. */
   const missing = new Set<string>()
+  // Hoisted rather than built inline: the board draws from it, and so does the
+  // dialog when it shows which token was clicked.
+  const sources = questArt({
+    content,
+    components,
+    resolveTexture,
+    onWarning: (message) => {
+      // Once each: the board is rebuilt on every refresh and would otherwise
+      // repeat the same line for every redraw.
+      if (missing.has(message)) return
+      missing.add(message)
+      session.runtime.log.add(new LogEntry(message, true))
+    },
+    sizeOf: (path) => sizes.get(path) ?? null,
+    questPath,
+    gameType,
+    pixelsPerSquare,
+  })
+
   const screen = playScreen({
     session,
     rich: { symbolOf: (character) => glyphs.get(character) ?? null, glyphs: symbolFont },
@@ -1253,23 +1272,12 @@ async function play(
       clearFire: text(new StringKey('val', 'CLEAR_FIRE')),
       eliminated: text(new StringKey('val', 'INVESTIGATOR_ELIMINATED')),
       close: text(new StringKey('val', 'CLOSE')),
+      // `CommonStringKeys.CANCEL`, the word on a cancelable event's way out.
+      cancel: text(new StringKey('val', 'CANCEL')),
+      undo: text(new StringKey('val', 'UNDO')),
+      save: text(new StringKey('val', 'SAVE')),
     },
-    sources: questArt({
-      content,
-      components,
-      resolveTexture,
-      onWarning: (message) => {
-        // Once each: the board is rebuilt on every refresh and would
-        // otherwise repeat the same line for every redraw.
-        if (missing.has(message)) return
-        missing.add(message)
-        session.runtime.log.add(new LogEntry(message, true))
-      },
-      sizeOf: (path) => sizes.get(path) ?? null,
-      questPath,
-      gameType,
-      pixelsPerSquare,
-    }),
+    sources,
     // `ChangePhaseWindow`: the artwork a phase is announced over, and the
     // party lined up beneath the investigators' own.
     phaseArt: (phase) => {
@@ -1297,6 +1305,15 @@ async function play(
       const data = content.tryGet(ItemData, id)
       const file = data === undefined ? null : resolveTexture(data.image)
       return file === null ? null : imageUrl(file)
+    },
+    // The token the player clicked, drawn beside its dialog so it says which
+    // one it came from. The same art the board draws, through the same crop:
+    // a token can be one cell of a sheet, and only this side can read the file
+    // to cut it out.
+    eventIcon: (name) => {
+      const art = sources.token(name)
+      if (art === null) return null
+      return imageUrl(art.image, art.crop)
     },
     monsterList: () =>
       session.runtime.monsters.map((instance, index) => {

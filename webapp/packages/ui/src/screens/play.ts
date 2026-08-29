@@ -50,6 +50,8 @@ export interface PlayableSession {
     highlight?: { x: number; y: number }
     /** `DrawItem`: the one item the event hands over, already resolved. */
     grantedItem?: string
+    /** Whether the event may be closed without answering it. */
+    cancelable?: boolean
     monster?: { monsterName: string }
     activation?: { effect: string; masterActions: string; move: string; ad: unknown }
     phase?: string
@@ -79,6 +81,8 @@ export interface PlayableSession {
   logEntry: (text: string) => void
   finishPuzzle: (name: string) => void
   closePuzzle: () => void
+  /** `DialogWindow.onCancel`: closes a cancelable event without running it. */
+  cancel: () => boolean
   activate: (name: string) => void
   activationDone: () => void
   investigatorsDone: () => void
@@ -256,6 +260,14 @@ export interface PlayOptions {
   /** `DrawItem`: the card art for an item an event hands over. */
   itemImage?: (id: string) => string | null
   /**
+   * The clicked token's own art, as a URL.
+   *
+   * Cropped already, because a token can be one cell of a sheet and only the
+   * application can read the file to cut it out. Null for an event that is
+   * not a board piece, which is most of them.
+   */
+  eventIcon?: (eventName: string) => string | null
+  /**
    * `ImageGreenBG` and `ImageMythosBackground`: the artwork a phase is
    * announced over.
    */
@@ -354,7 +366,7 @@ export function playScreen(options: PlayOptions): PlayScreen {
 
   const monster = monsterDialog({ ...rich, onLog: logEntry })
 
-  const events = eventDialog(rich)
+  const events = eventDialog({ ...rich, strings: { cancel: strings.cancel } })
   const activation = activationDialog({
     ...rich,
     onLog: logEntry,
@@ -812,9 +824,22 @@ export function playScreen(options: PlayOptions): PlayScreen {
         current.highlight === undefined && current.grantedItem !== undefined
           ? (options.itemImage?.(current.grantedItem) ?? null)
           : null
+      // The thing the player clicked, drawn beside the words so a dialog says
+      // which token it came from. Only a door, a token or a UI element
+      // resolves here; an event the quest raised itself has no picture.
+      const icon = current.name === undefined ? null : (options.eventIcon?.(current.name) ?? null)
       events.show({
         text: current.text ?? '',
         ...(card === null ? {} : { image: card }),
+        ...(icon === null ? {} : { icon }),
+        ...(current.cancelable === true
+          ? {
+              onCancel: () => {
+                session.cancel()
+                refresh()
+              },
+            }
+          : {}),
         buttons: (current.buttons ?? []).map((b) => ({
           text: b.label,
           onPress: () => {

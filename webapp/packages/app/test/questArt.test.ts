@@ -160,6 +160,70 @@ pps=64
       expect(sources.token('TokenA')).toMatchObject({ width: 1, height: 1 })
     })
 
+    it('calls a rectangle covering the whole file no crop at all', () => {
+      // Every Mansions token is its own file, and its declared rectangle is
+      // the file. Reporting that as a crop sends anything drawing the token
+      // outside the board through a canvas to cut out the picture it already
+      // had — and the dialog, which draws it in an <img>, cannot cut at all
+      // until the file has loaded.
+      const sources = questArt({
+        content: content(
+          '[TokenWhole]\nimage=img/whole\nx=0\ny=0\nwidth=256\nheight=256\npps=256\n',
+          always,
+        ),
+        components: components('[TokenA]\ntype=TokenWhole\n'),
+        resolveTexture: always,
+        sizeOf: size256,
+        gameType: 'MoM',
+        pixelsPerSquare: 100,
+      })
+
+      expect(sources.token('TokenA')?.crop).toBeUndefined()
+      // Still one square: the size comes from the rectangle either way.
+      expect(sources.token('TokenA')).toMatchObject({ width: 1, height: 1 })
+    })
+
+    it('keeps the rectangle when it is offset into the file', () => {
+      // The sheet fixture starts at x=64, so this is a real cell.
+      const sources = art('[TokenA]\ntype=TokenDoor\n', () => ({ width: 128, height: 128 }))
+
+      expect(sources.token('TokenA')?.crop).toEqual({ x: 64, y: 0, width: 128, height: 128 })
+    })
+
+    it('keeps the rectangle when it is smaller than the file', () => {
+      const sources = questArt({
+        content: content(
+          '[TokenCell]\nimage=img/sheet\nx=0\ny=0\nwidth=128\nheight=128\npps=128\n',
+          always,
+        ),
+        components: components('[TokenA]\ntype=TokenCell\n'),
+        resolveTexture: always,
+        sizeOf: size256,
+        gameType: 'MoM',
+        pixelsPerSquare: 100,
+      })
+
+      expect(sources.token('TokenA')?.crop).toEqual({ x: 0, y: 0, width: 128, height: 128 })
+    })
+
+    it('keeps the rectangle when the file’s size is unknown', () => {
+      // Nothing has decoded it yet, so there is no size to compare against and
+      // no grounds for calling the rectangle redundant.
+      const sources = questArt({
+        content: content(
+          '[TokenWhole]\nimage=img/whole\nx=0\ny=0\nwidth=256\nheight=256\npps=256\n',
+          always,
+        ),
+        components: components('[TokenA]\ntype=TokenWhole\n'),
+        resolveTexture: always,
+        sizeOf: () => null,
+        gameType: 'MoM',
+        pixelsPerSquare: 100,
+      })
+
+      expect(sources.token('TokenA')?.crop).toEqual({ x: 0, y: 0, width: 256, height: 256 })
+    })
+
     it('is null when the art cannot be resolved', () => {
       const sources = questArt({
         content: content(CONTENT, () => null),

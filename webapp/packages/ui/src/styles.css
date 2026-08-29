@@ -424,20 +424,71 @@ body {
   gap: var(--vk-gap);
   max-width: calc(var(--u) * 26);
 }
+/*
+ * The picture and the words, side by side.
+ *
+ * `DialogWindow.DrawItem` puts the card at x -21 with the text box running
+ * from -14, so the art sits to the left of the words rather than above them.
+ * It wraps under on a narrow screen, where two columns would leave the text
+ * too thin to read.
+ */
+.vk-event__main {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--u) * 0.6);
+  flex-wrap: wrap;
+}
+.vk-event__image {
+  flex: 0 0 auto;
+}
+.vk-event__image--empty {
+  display: none;
+}
 .vk-event__text {
   display: flex;
   flex-direction: column;
   gap: calc(var(--u) * 0.4);
+  flex: 1 1 calc(var(--u) * 12);
+  min-width: 0;
 }
 .vk-event__img {
   max-width: 100%;
   height: auto;
   border-radius: var(--vk-radius);
 }
+
+/*
+ * A token's own icon, at the size `DrawItem` gives its card — 6 units square.
+ *
+ * The uncropped case is the common one: every Mansions token is its own file.
+ * A cropped one is a cell of a sheet, and is placed by moving the source so
+ * the cell's corner meets the frame's and then scaling it to fit, which needs
+ * nothing known about the file's natural size.
+ */
+.vk-event__icon {
+  display: block;
+  width: calc(var(--u) * 4.5);
+  height: calc(var(--u) * 4.5);
+  overflow: hidden;
+  position: relative;
+}
+.vk-event__icon-art {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
 .vk-event__buttons {
   display: flex;
   flex-wrap: wrap;
   gap: calc(var(--u) * 0.3);
+  align-items: center;
+}
+/* Pushed to the end of the row: it is the way out, not a choice among the
+   others, and `DialogWindow` sets it apart for the same reason. */
+.vk-event__cancel {
+  margin-left: auto;
 }
 
 /* ---- hero selection ---- */

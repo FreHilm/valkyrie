@@ -46,7 +46,23 @@ export interface EventView {
   quota?: EventQuota
   /** Drawn above the text, as `monsterImage` does. */
   image?: CanvasImageSource | string
+  /**
+   * The token that was clicked, drawn beside the text where
+   * `DialogWindow.DrawItem` puts its card.
+   *
+   * A URL, already cropped: a token can be one cell of a sheet, and cutting
+   * one out is the caller's job because it is the caller that can read the
+   * file. Passing the sheet here would draw every token at once.
+   */
+  icon?: string
   title?: Text
+  /**
+   * `DialogWindow.onCancel`: closes without answering.
+   *
+   * Present only for an event the scenario allows to be cancelled — a door, a
+   * token, a UI element. Absent for one that has to be answered.
+   */
+  onCancel?: () => void
 }
 
 export interface EventDialog {
@@ -61,14 +77,24 @@ export interface EventDialog {
  * One element, reused: a quest fires hundreds of events, and rebuilding the
  * dialog each time would lose focus and make the transition flicker.
  */
-export function eventDialog(options: { rich?: RichTextOptions } = {}): EventDialog {
+export interface EventDialogStrings {
+  /** `CommonStringKeys.CANCEL`. */
+  cancel: Text
+}
+
+export function eventDialog(
+  options: { rich?: RichTextOptions; strings?: Partial<EventDialogStrings> } = {},
+): EventDialog {
   const body = el('div', { class: 'vk-event__text' })
   const actions = el('div', { class: 'vk-event__buttons', attrs: { role: 'group' } })
   const figure = el('div', { class: 'vk-event__image' })
+  // The picture and the words sit side by side, as `DrawItem` places them: the
+  // card goes to the left of the text box rather than above it.
+  const main = el('div', { class: 'vk-event__main', children: [figure, body] })
 
   const element = panel({
     class: 'vk-event',
-    children: [figure, body, actions],
+    children: [main, actions],
   })
   element.setAttribute('aria-live', 'polite')
 
@@ -79,6 +105,8 @@ export function eventDialog(options: { rich?: RichTextOptions } = {}): EventDial
       if (typeof view.image === 'string') {
         figure.append(el('img', { attrs: { src: view.image, alt: '' }, class: 'vk-event__img' }))
       }
+      if (view.icon !== undefined) figure.append(drawIcon(view.icon))
+      figure.classList.toggle('vk-event__image--empty', figure.childNodes.length === 0)
 
       clear(body)
       // Blank lines separate paragraphs; the C# renders one text blob and
@@ -97,6 +125,7 @@ export function eventDialog(options: { rich?: RichTextOptions } = {}): EventDial
       const quota = view.quota
       if (quota !== undefined) {
         drawQuota(actions, quota, view.buttons[0], options.rich ?? {})
+        drawCancel(actions, view.onCancel, options.strings?.cancel)
         return
       }
       for (const action of view.buttons) {
@@ -112,6 +141,7 @@ export function eventDialog(options: { rich?: RichTextOptions } = {}): EventDial
         setRichText(control, action.text, options.rich ?? {})
         actions.append(control)
       }
+      drawCancel(actions, view.onCancel, options.strings?.cancel)
     },
     clear: () => {
       clear(figure)
@@ -128,6 +158,38 @@ export function eventDialog(options: { rich?: RichTextOptions } = {}): EventDial
  * are disabled rather than clamped silently — the C# rebuilds the whole
  * window on each press to achieve the same thing.
  */
+/**
+ * The Cancel button, drawn last so it reads as the way out rather than a
+ * choice among the others.
+ *
+ * `DialogWindow` places it apart from the button column for the same reason,
+ * and only draws it when the event is cancelable.
+ */
+function drawCancel(into: HTMLElement, onCancel: (() => void) | undefined, text?: Text): void {
+  if (onCancel === undefined) return
+  into.append(
+    button(text ?? rawText('Cancel'), {
+      onPress: onCancel,
+      variant: 'secondary',
+      class: 'vk-event__cancel',
+    }),
+  )
+}
+
+/**
+ * The picture beside the text: the token the player clicked.
+ *
+ * Decorative, and deliberately so — the dialog's own words say what was
+ * clicked, and a screen reader announcing "search token" before them would be
+ * repeating the sentence that follows.
+ */
+function drawIcon(url: string): HTMLElement {
+  return el('span', {
+    class: 'vk-event__icon',
+    children: [el('img', { class: 'vk-event__icon-art', attrs: { src: url, alt: '' } })],
+  })
+}
+
 /** A button whose label may carry symbols, which plain text would blank out. */
 function richButton(text: string, onPress: () => void, rich: RichTextOptions = {}): HTMLElement {
   const control = button(rawText(text), { onPress, variant: 'primary' })

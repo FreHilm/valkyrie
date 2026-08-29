@@ -413,6 +413,89 @@ describe('eventDialog quota', () => {
   })
 })
 
+describe('eventDialog cancel and icon', () => {
+  // `DialogWindow` draws a Cancel only when the event is cancelable, and puts
+  // the picture to the left of the text rather than above it.
+  it('offers a way out when the event allows one', () => {
+    const onCancel = vi.fn()
+    const dialog = eventDialog()
+    dialog.show({ text: 'A desk.', buttons: [], onCancel })
+
+    const cancel = dialog.element.querySelector<HTMLButtonElement>('.vk-event__cancel')
+    expect(cancel).not.toBeNull()
+    cancel?.click()
+    expect(onCancel).toHaveBeenCalled()
+  })
+
+  it('offers none when the event has to be answered', () => {
+    const dialog = eventDialog()
+    dialog.show({ text: 'Choose.', buttons: [{ text: 'Open it', onPress: vi.fn() }] })
+
+    expect(dialog.element.querySelector('.vk-event__cancel')).toBeNull()
+  })
+
+  it('draws Cancel last, after the choices', () => {
+    // It is the way out, not one of the options, and reading it first would
+    // make it look like the expected answer.
+    const dialog = eventDialog()
+    dialog.show({
+      text: 'Choose.',
+      buttons: [{ text: 'Open it', onPress: vi.fn() }],
+      onCancel: vi.fn(),
+    })
+
+    const labels = [...dialog.element.querySelectorAll('.vk-event__buttons button')].map(
+      (b) => b.textContent,
+    )
+    expect(labels).toEqual(['Open it', 'Cancel'])
+  })
+
+  it('keeps the way out on an event that asks for a number', () => {
+    // A quota window is still a dialog a token opened, and `CreateQuotaWindow`
+    // draws its cancel the same way.
+    const dialog = eventDialog()
+    dialog.show({
+      text: 'How many?',
+      buttons: [{ text: 'Search', onPress: vi.fn() }],
+      quota: { value: 0, max: 10, onSubmit: vi.fn() },
+      onCancel: vi.fn(),
+    })
+
+    expect(dialog.element.querySelector('.vk-event__cancel')).not.toBeNull()
+  })
+
+  it('takes the caller’s word for Cancel, so it can be translated', () => {
+    const dialog = eventDialog({ strings: { cancel: rawText('Avbryt') } })
+    dialog.show({ text: 'A desk.', buttons: [], onCancel: vi.fn() })
+
+    expect(dialog.element.querySelector('.vk-event__cancel')?.textContent).toBe('Avbryt')
+  })
+
+  it('shows the token that was clicked beside the words', () => {
+    const dialog = eventDialog()
+    dialog.show({ text: 'A desk.', buttons: [], icon: 'blob:search' })
+
+    const art = dialog.element.querySelector<HTMLImageElement>('.vk-event__icon-art')
+    expect(art?.getAttribute('src')).toBe('blob:search')
+    // Decorative: the dialog's own words say what was clicked, and a reader
+    // announcing the token first would repeat the sentence that follows.
+    expect(art?.getAttribute('alt')).toBe('')
+    // The picture and the text share a row; the C# places the card left of the
+    // text box rather than above it.
+    expect(dialog.element.querySelector('.vk-event__main .vk-event__image')).not.toBeNull()
+  })
+
+  it('takes the picture away when the next event has none', () => {
+    // The dialog is one element reused for every event; a leftover picture
+    // would follow the player into the next one.
+    const dialog = eventDialog()
+    dialog.show({ text: 'A desk.', buttons: [], icon: 'blob:search' })
+    dialog.show({ text: 'A corridor.', buttons: [] })
+
+    expect(dialog.element.querySelector('.vk-event__icon')).toBeNull()
+  })
+})
+
 describe('eventDialog symbols in button labels', () => {
   // An action-costing button is written "{action} Search" and reaches the
   // screen as a private-use codepoint — U+F208. Rendered as plain text that

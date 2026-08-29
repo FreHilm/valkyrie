@@ -142,17 +142,33 @@ export function questArt(options: ArtOptions): SceneSources {
       if (!(component instanceof Token)) return null
 
       const data = tokenData(content, component.tokenName)
-      const declared = component.customImage.length > 0 ? component.customImage : data?.image
-      if (declared === undefined) return null
-      const image = resolveTexture(declared)
+      const named = component.customImage.length > 0 ? component.customImage : data?.image
+      if (named === undefined) return null
+      const image = resolveTexture(named)
       if (image === null) return null
 
       // A token is a rectangle within a sheet, and its board size is that
       // rectangle measured in squares.
-      const crop =
+      //
+      // A rectangle covering the whole file is not a crop, and saying so
+      // matters to anything that has to draw the token outside the board: the
+      // canvas can crop for free, but an <img> needs the source's natural size
+      // to do it, which it only learns once the file has loaded. Every
+      // Mansions token is its own file, so this is the usual case and the
+      // dialog never has to wait.
+      const natural = sizeOf(image)
+      const declared =
         data !== null && data.width > 0 && data.height > 0
           ? { x: data.x, y: data.y, width: data.width, height: data.height }
           : undefined
+      const wholeFile =
+        declared !== undefined &&
+        declared.x === 0 &&
+        declared.y === 0 &&
+        natural !== null &&
+        declared.width === natural.width &&
+        declared.height === natural.height
+      const crop = wholeFile ? undefined : declared
       const pps = data?.pxPerSquare ?? 0
       const size =
         crop !== undefined && pps > 0
