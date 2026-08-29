@@ -28,10 +28,45 @@ The one derived artefact that _is_ committed is
 | `Texture2D` |   733 | DXT5 355, DXT1 300, RGBA32 66, Alpha8 8, RGB24 4   |
 | `AudioClip` |   174 | every one Vorbis, in FSB5 containers               |
 | `TextAsset` |    29 | launcher and store strings — **not** the game text |
+| `Font`      |     6 | one of which carries the icons; see below          |
 
 **No PVR.** The task notes and the ADR both expected DDS _and_ PVR. PVR is the
 mobile build's format; a desktop install has none, so that path is not
 implemented. It would be needed for an Android import.
+
+## Fonts: one of six, and why any at all
+
+The C# imports no fonts, because Unity already holds the faces it draws with. A
+browser does not, and this is not cosmetic. Quest prose writes its icons as
+markers that `outputSymbolReplace` turns into codepoints in `U+F200`–`F20F`;
+without a face covering that range, "spend 1 {action}" renders with a blank box
+where the icon belongs. Only `MADGaramondPro` fills it in — the face
+`MoMGameType.GetFont` hands to every piece of text in the game.
+
+It is a commercial font, so the port does not ship it. It does not need to: the
+install embeds it, and the player owns the install. The same bargain as the art
+and the audio.
+
+**Reading it.** `Font` is unlike the other three classes in that its useful part
+is _found_ rather than parsed. The preamble — names, fallbacks, character rects,
+kerning — moves between Unity versions and between faces: in this install
+`m_FontData` starts at byte 84 for one face and 6,456 for another. So the reader
+searches for a length-prefixed run that **is** a font, and checks it rather than
+assuming: the signature must be one of the four sfnt spellings, the length must
+fit inside the object, and the table directory must be self-consistent. A stray
+`0x00010000` inside a glyf table has no plausible directory behind it.
+
+**Keeping one.** The other five faces are imported and discarded, by coverage
+rather than by name — `sfnt.ts` reads the `cmap` and nothing else. Writing them
+all out would spend about 50 MB of a player's storage, 16 of it on a Korean
+fallback, on files nothing will ever open. Fonts are also deduplicated by name
+alone, unlike every other asset: the same face appears in three asset files
+under three path ids and is the same 600 KB each time.
+
+Both parts are checked against the real install by
+`tools/differential/fonts/compare.mjs`, which walks each extracted face's table
+directory by a rule the reader does not share, and compares the coverage answer
+against what `fontTools` says. Six faces, one covering the range.
 
 ## The finding that matters most: the content has moved out of the install
 
@@ -214,11 +249,12 @@ raw keys too, given a current install.
 Reading the install and the cache together:
 
 ```
-1,146 textures    245 audio    350 text     289.2 MB     117s
+531 textures    251 audio    351 text    1 font    260.8 MB    98s
 ```
 
 against 726 / 173 / 29 and 69.8 MB from the install alone — the difference is
-the downloaded scenario content.
+the downloaded scenario content. The one font is `MADGaramondPro`, kept out of
+the six the install embeds.
 
 **99 audio streams are skipped**, all with the same cause: their Vorbis setup
 header is not one of the three `OggVorbisHeader.cs` carries. That is the same

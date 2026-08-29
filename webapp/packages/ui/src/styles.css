@@ -263,14 +263,16 @@ body {
 /*
  * Game symbols inside quest prose.
  *
- * The game draws these as icons from a private-use range in its own font,
- * which the port does not ship (docs/ui-foundation.md). An unshipped glyph is
- * not a styling difference — it is invisible, and "spend 1 {action}" loses the
- * word that made it an instruction. So the symbol is set as its own name, in a
- * chip that reads as one token rather than a stray word in the sentence.
+ * The game draws these as icons from a private-use range in its own font. That
+ * font is commercial and the port does not ship it (docs/ui-foundation.md) —
+ * it comes from the player's own install, which embeds it, and `symbolFont.ts`
+ * loads it out of their import and names it in `--vk-symbol-font`.
  *
- * Point `--vk-symbol-font` at a face that carries the range and these become
- * the glyphs instead, without anything but this rule changing.
+ * Until then, and for anyone who has not imported the game, the fallback below
+ * applies. It has to exist: a glyph with no font behind it is not unstyled but
+ * invisible, and "spend 1 {action}" would lose the word that made it an
+ * instruction. So the symbol is set as its own name, in a chip that reads as
+ * one token rather than a stray word in the sentence.
  */
 .vk-symbol {
   display: inline-block;
@@ -293,13 +295,17 @@ body {
  * The glyph itself, when a font carrying the private-use range is loaded and
  * the caller has said so. No chip: the icon is already one token, and a border
  * round it would read as a second.
+ *
+ * Set slightly larger than the words around it. The Unity build has icon and
+ * text in one face and needs no adjustment; here the text is a fallback face
+ * with its own cap height, against which the glyph at 1em reads undersized.
  */
 .vk-symbol--glyph {
   padding: 0;
   margin: 0 0.1em;
   border: 0;
   border-radius: 0;
-  font-size: 1.05em;
+  font-size: 1.15em;
   font-weight: 400;
   font-variant: normal;
   letter-spacing: normal;

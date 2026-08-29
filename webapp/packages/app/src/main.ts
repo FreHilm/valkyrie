@@ -101,6 +101,7 @@ import { libraryPaths, normaliseQuestPath, startQuest, surveyLibrary } from './l
 import { monsterProfile, questArt, questUiElements, tileImages } from './questArt.js'
 import { monsterDialogView } from './monsterView.js'
 import { puzzleRenderer } from './puzzleView.js'
+import { SYMBOL_FAMILY, loadSymbolFont } from './symbolFont.js'
 import { defaultQuestMusic, questAudio } from './questAudio.js'
 import { setUpParty } from './partySetup.js'
 import { formatBytes, storageReport } from './storage.js'
@@ -769,6 +770,7 @@ function importDemo(): void {
         textures: result.textures,
         audio: result.audio,
         text: result.text,
+        fonts: result.fonts,
         bytesWritten: result.bytesWritten,
         skipped: result.skipped.length,
       }
@@ -1093,11 +1095,19 @@ async function play(
   // time anything is drawn, so the renderer needs the table read backwards to
   // know what it is looking at.
   const glyphs = symbolNames(gameType)
+  // Whether those codepoints can actually be drawn. The face comes out of the
+  // player's own import, so this is false until they have imported the game —
+  // and then the symbols are set as their names instead, which reads correctly
+  // and simply is not what the game looks like.
+  const symbolFont = await loadSymbolFont({ fs, paths: storage })
+  // Named only once there is a face behind it, so the stylesheet never points
+  // at a family that does not exist. `symbolFont.ts` owns the name.
+  if (symbolFont) root.style.setProperty('--vk-symbol-font', `'${SYMBOL_FAMILY}'`)
   /** Content the scenario asked for and this player does not have. */
   const missing = new Set<string>()
   const screen = playScreen({
     session,
-    rich: { symbolOf: (character) => glyphs.get(character) ?? null },
+    rich: { symbolOf: (character) => glyphs.get(character) ?? null, glyphs: symbolFont },
     notices: () => [...missing],
     // `EventManager.cs:309`: a puzzle event opens its window instead of a
     // dialog, and the event's buttons only appear once it is solved.

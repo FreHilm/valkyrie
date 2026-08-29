@@ -19,6 +19,8 @@ import { ClassID } from '../src/unityAssets.js'
 import {
   KNOWN_SETUP_CRC,
   audioClipBody,
+  fontBody,
+  fontFile,
   fsb5,
   serializedFile,
   textAssetBody,
@@ -70,10 +72,135 @@ describe('importFfgApp', () => {
     const fs = new MemoryFileSystem()
     const result = await importFfgApp({ ...baseOptions, fs, source: emptySource })
 
-    expect(result).toMatchObject({ textures: 0, audio: 0, text: 0 })
+    expect(result).toMatchObject({ textures: 0, audio: 0, text: 0, fonts: 0 })
     expect((await fs.stat('/import/img'))?.kind).toBe('directory')
     expect((await fs.stat('/import/audio'))?.kind).toBe('directory')
     expect((await fs.stat('/import/text'))?.kind).toBe('directory')
+    expect((await fs.stat('/import/fonts'))?.kind).toBe('directory')
+  })
+
+  /**
+   * The fonts have to survive the whole pipeline, not just the reader.
+   *
+   * When this was first written the reader was right and the import still
+   * produced nothing, because the loop filters by class before it reads and
+   * the new class was not in the filter. A reader test cannot see that; only
+   * a file on disk at the end can.
+   */
+  it('writes an embedded font out where the app can load it', async () => {
+    const fs = new MemoryFileSystem()
+    const font = fontFile({ covers: [0xf200, 0xf20f] })
+    const source: AssetSource = {
+      list: async () => ['sharedassets0.assets'],
+      read: async () =>
+        serializedFile([
+          { classId: ClassID.Font, body: fontBody({ name: 'MADGaramondPro', font }) },
+        ]),
+    }
+
+    const result = await importFfgApp({ ...baseOptions, fs, source })
+
+    expect(result.fonts).toBe(1)
+    expect([...(await fs.readBytes('/import/fonts/MADGaramondPro.ttf'))]).toEqual([...font])
+  })
+
+  it('names a font by what it is, not by what it is assumed to be', async () => {
+    // A CFF face written as .ttf loads anyway, but the file then lies about
+    // itself to anything that reads the directory.
+    const fs = new MemoryFileSystem()
+    const source: AssetSource = {
+      list: async () => ['sharedassets0.assets'],
+      read: async () =>
+        serializedFile([
+          {
+            classId: ClassID.Font,
+            body: fontBody({
+              name: 'NotoSansCJKkr',
+              font: fontFile({ signature: 0x4f54544f, covers: [0xf200, 0xf20f] }),
+            }),
+          },
+        ]),
+    }
+
+    await importFfgApp({ ...baseOptions, fs, source })
+
+    expect((await fs.stat('/import/fonts/NotoSansCJKkr.otf'))?.kind).toBe('file')
+  })
+
+  it('keeps only the face that carries the icons', async () => {
+    // An install embeds six, five of which have nothing in the range — one of
+    // them 16 MB of Korean. Writing them all would spend a player's storage on
+    // files nothing will ever open.
+    const fs = new MemoryFileSystem()
+    const source: AssetSource = {
+      list: async () => ['sharedassets0.assets'],
+      read: async () =>
+        serializedFile([
+          {
+            classId: ClassID.Font,
+            body: fontBody({
+              name: 'MADGaramondPro',
+              font: fontFile({ covers: [0xf200, 0xf20f] }),
+            }),
+          },
+          {
+            classId: ClassID.Font,
+            body: fontBody({
+              name: 'NotoSansCJKkr-Regular',
+              font: fontFile({ covers: [0x4e00, 0x9fff], cmapFormat: 12 }),
+            }),
+          },
+          {
+            classId: ClassID.Font,
+            body: fontBody({ name: 'LiberationSans', font: fontFile({ covers: [0x20, 0x24f] }) }),
+          },
+        ]),
+    }
+
+    const result = await importFfgApp({ ...baseOptions, fs, source })
+
+    expect(result.fonts).toBe(1)
+    expect((await fs.stat('/import/fonts/MADGaramondPro.ttf'))?.kind).toBe('file')
+    expect(await fs.stat('/import/fonts/LiberationSans.ttf')).toBeNull()
+  })
+
+  it('writes a face once however many path ids carry it', async () => {
+    // MADGaramondPro appears three times over an install under three different
+    // path ids, and is the same 600 KB every time. Every other asset is keyed
+    // by id precisely because names repeat and mean different things — a dozen
+    // textures are called "Image_2" — but a face is not like that, and keying
+    // it that way wrote it out three times as .ttf, _000001 and _000002.
+    const fs = new MemoryFileSystem()
+    const body = fontBody({ name: 'MADGaramondPro', font: fontFile({ covers: [0xf200, 0xf20f] }) })
+    const source: AssetSource = {
+      list: async () => ['sharedassets0.assets'],
+      read: async () =>
+        serializedFile([
+          { classId: ClassID.Font, body },
+          { classId: ClassID.Font, body },
+          { classId: ClassID.Font, body },
+        ]),
+    }
+
+    const result = await importFfgApp({ ...baseOptions, fs, source })
+
+    expect(result.fonts).toBe(1)
+    expect(await fs.stat('/import/fonts/MADGaramondPro_000001.ttf')).toBeNull()
+  })
+
+  it('does not write a font it could not find inside the object', async () => {
+    const fs = new MemoryFileSystem()
+    const source: AssetSource = {
+      list: async () => ['sharedassets0.assets'],
+      read: async () =>
+        serializedFile([
+          { classId: ClassID.Font, body: textAssetBody('Empty', new Uint8Array(64)) },
+        ]),
+    }
+
+    const result = await importFfgApp({ ...baseOptions, fs, source })
+
+    expect(result.fonts).toBe(0)
   })
 
   it('records a file it cannot parse instead of failing the whole import', async () => {

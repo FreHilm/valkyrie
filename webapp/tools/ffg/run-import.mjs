@@ -106,6 +106,7 @@ console.log(`\nimported in ${seconds.toFixed(1)}s to ${out}`)
 console.log(`  textures : ${result.textures} (${result.emptyTextures} empty, skipped)`)
 console.log(`  audio    : ${result.audio}`)
 console.log(`  text     : ${result.text}`)
+console.log(`  fonts    : ${result.fonts}`)
 console.log(`  written  : ${(result.bytesWritten / 1e6).toFixed(1)} MB`)
 if (result.skipped.length > 0) {
   console.log(`  skipped  : ${result.skipped.length}`)

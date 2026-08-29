@@ -364,3 +364,12 @@ echo "==> playing a real scenario end to end (needs a downloaded quest)"
 echo
 echo "==> quest text symbol replacement"
 (cd "$REPO/webapp" && npx --no-install tsx "$HERE/symbols/compare.mjs" "$FUZZ_N")
+
+# ---- embedded fonts ------------------------------------------------------
+# The Font reader and the cmap coverage test, against the faces a real install
+# embeds. Both work by inspecting bytes rather than walking a layout, so a
+# fixture only proves they handle the shape the fixture was built with. Needs
+# the install; skips itself without one.
+echo
+echo "==> embedded fonts (needs an install)"
+(cd "$REPO/webapp" && npx --no-install tsx "$HERE/fonts/compare.mjs")

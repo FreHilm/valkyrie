@@ -16,11 +16,12 @@
  * for the file's Unity version, exactly as AssetStudio does.
  */
 
-/** `ClassIDType` values for the three classes the import needs. */
+/** `ClassIDType` values for the four classes the import needs. */
 export const ClassID = {
   Texture2D: 28,
   TextAsset: 49,
   AudioClip: 83,
+  Font: 128,
 } as const
 
 export class UnityAssetError extends Error {
@@ -353,7 +354,15 @@ export interface TextAsset {
   data: Uint8Array
 }
 
-export type UnityAsset = TextureAsset | AudioAsset | TextAsset
+export interface FontAsset {
+  kind: 'Font'
+  pathId: bigint
+  name: string
+  /** The embedded font file, exactly as the game ships it. */
+  data: Uint8Array
+}
+
+export type UnityAsset = TextureAsset | AudioAsset | TextAsset | FontAsset
 
 /** Reads one object's body. Returns null for a class the import ignores. */
 export function readObject(
@@ -373,6 +382,8 @@ export function readObject(
       return readAudioClip(reader, info)
     case ClassID.TextAsset:
       return readTextAsset(reader, info)
+    case ClassID.Font:
+      return readFont(body, info)
     default:
       return null
   }
@@ -508,6 +519,84 @@ function readAudioClip(reader: Reader, info: ObjectInfo): AudioAsset {
 function readTextAsset(reader: Reader, info: ObjectInfo): TextAsset {
   const name = reader.alignedString()
   return { kind: 'TextAsset', pathId: info.pathId, name, data: reader.u8Array() }
+}
+
+/**
+ * The four things an sfnt font can begin with.
+ *
+ * `0x00010000` is TrueType outlines, `OTTO` is CFF, `true` is the old Apple
+ * spelling, and `ttcf` is a collection of several faces in one file.
+ */
+const SFNT_SIGNATURES = [0x00010000, 0x4f54544f, 0x74727565, 0x74746366]
+
+/**
+ * The smallest thing worth mistaking for a font, to keep the search below from
+ * matching four incidental bytes in the middle of the glyph outlines.
+ */
+const SMALLEST_FONT = 4096
+
+/**
+ * Reads `Font`, whose useful part is the font file the game embeds in it.
+ *
+ * Unlike the other three classes this one is *found* rather than parsed
+ * straight through. `Font` carries a long preamble — names, fallbacks,
+ * character rects, kerning — whose shape moves between Unity versions and
+ * between fonts: in one install `m_FontData` starts at byte 84 for one face
+ * and byte 6456 for another. Transliterating that layout would be a lot of
+ * version-conditional code to maintain for a field that identifies itself.
+ *
+ * So the search is for a length-prefixed run of bytes that *is* a font, and
+ * "is a font" is checked rather than assumed: the signature has to be one of
+ * the four, the length prefix has to fit inside the object, and the table
+ * directory has to be self-consistent. `looksLikeSfnt` is what makes this a
+ * verification rather than a guess — a stray `0x00010000` inside a glyf table
+ * has no plausible directory behind it and is rejected.
+ */
+function readFont(body: Uint8Array, info: ObjectInfo): FontAsset | null {
+  const view = new DataView(body.buffer, body.byteOffset, body.byteLength)
+  const nameLength = view.getUint32(0, true)
+  // A name that will not fit is a body this reader has misunderstood; there is
+  // nothing to gain by reading on into it.
+  if (nameLength > body.length - 4) return null
+  const name = new TextDecoder().decode(body.subarray(4, 4 + nameLength))
+
+  for (let at = 8; at + 4 <= body.length; at += 1) {
+    if (!SFNT_SIGNATURES.includes(view.getUint32(at, false))) continue
+    const length = view.getUint32(at - 4, true)
+    if (length < SMALLEST_FONT || at + length > body.length) continue
+    const data = body.subarray(at, at + length)
+    if (!looksLikeSfnt(data)) continue
+    return { kind: 'Font', pathId: info.pathId, name, data }
+  }
+  return null
+}
+
+/**
+ * Whether these bytes really are a font, by their own table directory.
+ *
+ * An sfnt opens with a count of tables and then that many 16-byte records, each
+ * naming a table and giving its offset and length. Every one of those has to
+ * land inside the data for the file to be readable at all, which is a
+ * coincidence four arbitrary bytes will not produce.
+ */
+function looksLikeSfnt(data: Uint8Array): boolean {
+  if (data.length < 12) return false
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+  // A collection points at its faces instead of carrying a directory itself;
+  // the signature and a sane face count are as far as this needs to go.
+  if (view.getUint32(0, false) === 0x74746366) {
+    return data.length >= 16 && view.getUint32(12, false) > 0
+  }
+
+  const tables = view.getUint16(4, false)
+  if (tables === 0 || 12 + tables * 16 > data.length) return false
+  for (let i = 0; i < tables; i++) {
+    const record = 12 + i * 16
+    const offset = view.getUint32(record + 8, false)
+    const length = view.getUint32(record + 12, false)
+    if (offset + length > data.length) return false
+  }
+  return true
 }
 
 /** Resolves a `StreamingInfo` against the sibling resource files. */

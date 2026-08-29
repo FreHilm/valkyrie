@@ -20,8 +20,12 @@ import {
   resolveStreamData,
   resourceKey,
 } from '../src/unityAssets.js'
+import type { UnityAsset } from '../src/unityAssets.js'
 import {
+  Builder,
   audioClipBody,
+  fontBody,
+  fontFile,
   serializedFile as fixtureFile,
   textAssetBody,
   texture2DBody,
@@ -348,6 +352,71 @@ describe('reading the three asset classes', () => {
     })
 
     expect(names).toEqual(['a', 'b', 'c'])
+  })
+})
+
+describe('reading a Font', () => {
+  const read = (body: Uint8Array): UnityAsset | null => {
+    const file = fixtureFile([{ classId: ClassID.Font, body }])
+    const parsed = readSerializedFile(file)
+    return readObject(file, parsed.objects[0]!, parsed.version)
+  }
+
+  it('reads the embedded font file out of a Font', () => {
+    const font = fontFile()
+    const asset = read(fontBody({ name: 'MADGaramondPro', font }))
+
+    expect(asset).toMatchObject({ kind: 'Font', name: 'MADGaramondPro' })
+    expect([...(asset?.data ?? [])]).toEqual([...font])
+  })
+
+  it('finds the font wherever the preamble ends', () => {
+    // The real install puts m_FontData at byte 84 for one face and 6,456 for
+    // another. Nothing about the search may depend on which.
+    const font = fontFile()
+    for (const preamble of [0, 4, 84, 6452]) {
+      const asset = read(fontBody({ name: 'Face', font, preamble }))
+      expect(asset?.data, `preamble of ${String(preamble)}`).toHaveLength(font.length)
+    }
+  })
+
+  it('takes a CFF font as readily as a TrueType one', () => {
+    const font = fontFile({ signature: 0x4f54544f })
+    expect(read(fontBody({ name: 'Cff', font }))?.data).toHaveLength(font.length)
+  })
+
+  it('takes a font collection', () => {
+    const font = fontFile({ signature: 0x74746366 })
+    expect(read(fontBody({ name: 'Collection', font }))?.data).toHaveLength(font.length)
+  })
+
+  it('is not fooled by a signature that has no font behind it', () => {
+    // The four bytes of a TrueType signature occur in ordinary data, and a
+    // preamble is ordinary data. What rejects this is the table directory:
+    // there is not one, so nothing here is a font.
+    const b = new Builder()
+    b.alignedString('NotAFont')
+    b.i32(65536) // a length prefix
+    b.u8(0x00).u8(0x01).u8(0x00).u8(0x00) // ... followed by the signature
+    for (let i = 0; i < 8192; i++) b.u8(0x41)
+
+    expect(read(b.build())).toBeNull()
+  })
+
+  it('rejects a font whose table directory runs off the end', () => {
+    // Truncation is the failure that matters: half a font written to disk is
+    // worse than none, because it loads as a font and draws nothing.
+    const font = fontFile()
+    const truncated = font.subarray(0, font.length - 100)
+    const b = new Builder()
+    b.alignedString('Truncated')
+    b.u8Array(truncated)
+
+    expect(read(b.build())).toBeNull()
+  })
+
+  it('ignores a run too short to be a font', () => {
+    expect(read(fontBody({ name: 'Tiny', font: fontFile({ padding: 16 }) }))).toBeNull()
   })
 })
 

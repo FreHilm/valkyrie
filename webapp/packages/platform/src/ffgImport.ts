@@ -14,10 +14,19 @@
  *     <import>/img/<TextureName>.<ext>
  *     <import>/audio/<ClipName>.ogg
  *     <import>/text/<AssetName>.txt
+ *     <import>/fonts/<FontName>.ttf
+ *
+ * The fonts are ours to add: the C# has no use for them, because Unity already
+ * holds the faces it draws with. A browser does not, and the game writes its
+ * icons as codepoints in a private-use range that only its own font fills in,
+ * so without this "spend 1 {action}" arrives with a blank box where the icon
+ * should be. Taking them from the player's own install is the same bargain as
+ * the art and the audio: their copy, extracted on their device.
  */
 
 import { TextureFormat, decodeUnityTexture } from './dds.js'
 import { fsbToOgg } from './fsb.js'
+import { coversCodepoints } from './sfnt.js'
 import { isUnityBundle, readBundle } from './unityBundle.js'
 import type { FileSystem } from './filesystem.js'
 import { combine } from './path.js'
@@ -30,7 +39,7 @@ import {
   resolveStreamData,
   resourceKey,
 } from './unityAssets.js'
-import type { AudioAsset, TextAsset, TextureAsset } from './unityAssets.js'
+import type { AudioAsset, FontAsset, TextAsset, TextureAsset } from './unityAssets.js'
 
 export type GameId = 'MoM' | 'D2E'
 
@@ -117,6 +126,7 @@ export interface ImportResult {
   textures: number
   audio: number
   text: number
+  fonts: number
   /** Textures with no pixel data. The C# writes these out as empty files. */
   emptyTextures: number
   skipped: { name: string; reason: string }[]
@@ -195,12 +205,14 @@ export async function importFfgApp(options: ImportOptions): Promise<ImportResult
   const imgPath = combine(importPath, 'img')
   const audioPath = combine(importPath, 'audio')
   const textPath = combine(importPath, 'text')
-  for (const path of [imgPath, audioPath, textPath]) await fs.createDirectory(path)
+  const fontPath = combine(importPath, 'fonts')
+  for (const path of [imgPath, audioPath, textPath, fontPath]) await fs.createDirectory(path)
 
   const result: ImportResult = {
     textures: 0,
     audio: 0,
     text: 0,
+    fonts: 0,
     emptyTextures: 0,
     skipped: [],
     bytesWritten: 0,
@@ -255,7 +267,8 @@ export async function importFfgApp(options: ImportOptions): Promise<ImportResult
         if (
           info.classId !== ClassID.Texture2D &&
           info.classId !== ClassID.AudioClip &&
-          info.classId !== ClassID.TextAsset
+          info.classId !== ClassID.TextAsset &&
+          info.classId !== ClassID.Font
         ) {
           continue
         }
@@ -270,12 +283,22 @@ export async function importFfgApp(options: ImportOptions): Promise<ImportResult
         if (asset === null) continue
 
         // The same asset can appear in more than one bundle; write it once.
-        const identity = `${asset.kind}:${asset.name}:${info.pathId}`
+        //
+        // A font is identified by its name alone, unlike everything else. The
+        // path id is in the key precisely because names repeat — a dozen
+        // textures are called "Image_2" and are different pictures — but a
+        // face is not like that: MADGaramondPro appears in three asset files
+        // as three path ids and is the same 600 KB every time. Keeping the id
+        // in its key wrote it out three times over.
+        const identity =
+          asset.kind === 'Font'
+            ? `Font:${asset.name}`
+            : `${asset.kind}:${asset.name}:${info.pathId}`
         if (seenObjects.has(identity)) continue
         seenObjects.add(identity)
 
         const payload =
-          asset.kind === 'TextAsset'
+          asset.kind === 'TextAsset' || asset.kind === 'Font'
             ? asset.data
             : asset.streamData !== null
               ? resolveStreamData(asset.streamData, fileResources)
@@ -286,6 +309,8 @@ export async function importFfgApp(options: ImportOptions): Promise<ImportResult
             await writeTexture(asset, payload, uniqueName, imgPath, options, result)
           } else if (asset.kind === 'AudioClip') {
             await writeAudio(asset, payload, uniqueName, audioPath, options, result)
+          } else if (asset.kind === 'Font') {
+            await writeFont(asset, uniqueName, fontPath, options, result)
           } else {
             await writeText(asset, payload, uniqueName, textPath, game, options, result)
           }
@@ -374,6 +399,53 @@ async function writeText(
   await options.fs.writeBytes(path, plain)
   result.text++
   result.bytesWritten += plain.length
+}
+
+/**
+ * The private-use range the game writes its icons in.
+ *
+ * `outputSymbolReplace` turns `{action}` into U+F208 and its siblings into the
+ * codepoints around it. A face that covers none of this is a face the port has
+ * no use for.
+ */
+const SYMBOL_RANGE: readonly [number, number] = [0xf200, 0xf20f]
+
+/**
+ * Writes an embedded font out as the font file it already is — if the port has
+ * any use for it.
+ *
+ * Nothing is decoded or re-encoded on the way: unlike a texture, which arrives
+ * in a GPU format no browser can display, `m_FontData` is a TrueType or CFF
+ * file that `FontFace` will take as it stands. The extension follows the
+ * signature rather than being assumed, so a CFF face is not written out
+ * claiming to be TrueType.
+ *
+ * Most of them are skipped. A Mansions install embeds six faces and the port
+ * wants one thing from any of them — the icons. Writing the rest would spend
+ * 50 MB of a player's storage, 16 of it on a Korean fallback, on files nothing
+ * will ever open. The test is coverage rather than the name, because the name
+ * is the install's business and the range is ours.
+ */
+async function writeFont(
+  asset: FontAsset,
+  uniqueName: (name: string) => string,
+  fontPath: string,
+  options: ImportOptions,
+  result: ImportResult,
+): Promise<void> {
+  if (!coversCodepoints(asset.data, SYMBOL_RANGE[0], SYMBOL_RANGE[1])) return
+
+  const signature = new DataView(
+    asset.data.buffer,
+    asset.data.byteOffset,
+    asset.data.byteLength,
+  ).getUint32(0, false)
+  const extension = signature === 0x4f54544f ? '.otf' : signature === 0x74746366 ? '.ttc' : '.ttf'
+
+  const path = combine(fontPath, `${uniqueName(asset.name)}${extension}`)
+  await options.fs.writeBytes(path, asset.data)
+  result.fonts++
+  result.bytesWritten += asset.data.length
 }
 
 /** Rebuilds FSB5 Vorbis into a playable Ogg stream. */

@@ -28,6 +28,7 @@ export interface ImportSummary {
   textures: number
   audio: number
   text: number
+  fonts: number
   bytesWritten: number
   skipped: number
 }
@@ -195,6 +196,7 @@ export function importScreen(options: ImportOptions): ImportScreen {
       row('Images', String(summary.textures))
       row('Sounds', String(summary.audio))
       row('Text', String(summary.text))
+      row('Fonts', String(summary.fonts))
       row('Stored', format(summary.bytesWritten))
       if (summary.skipped > 0) row('Skipped', String(summary.skipped))
       element.append(list)

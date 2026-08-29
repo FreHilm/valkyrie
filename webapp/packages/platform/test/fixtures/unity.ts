@@ -161,6 +161,139 @@ export function textAssetBody(name: string, payload: Uint8Array): Uint8Array {
   return new Builder().alignedString(name).u8Array(payload).build()
 }
 
+/**
+ * A minimal but structurally valid sfnt.
+ *
+ * `signature` picks TrueType, CFF or a collection; `padding` grows the file
+ * without changing its table directory, so a test can make one big enough to
+ * pass the reader's size floor. The single table is `cmap`, and its offset and
+ * length are real, because the reader checks exactly that.
+ */
+export function fontFile(
+  options: {
+    signature?: number
+    padding?: number
+    covers?: readonly [number, number]
+    /** Which cmap subtable format to write the coverage as. Default 4. */
+    cmapFormat?: 4 | 12
+    /** Points the cmap table record past the end of the data. */
+    danglingCmap?: boolean
+  } = {},
+): Uint8Array {
+  const signature = options.signature ?? 0x00010000
+  const padding = options.padding ?? 8192
+
+  const b = new Builder()
+  const beU32 = (value: number): void => {
+    b.u8(value >>> 24)
+      .u8(value >>> 16)
+      .u8(value >>> 8)
+      .u8(value)
+  }
+  const beU16 = (value: number): void => {
+    b.u8(value >>> 8).u8(value)
+  }
+
+  beU32(signature)
+  if (signature === 0x74746366) {
+    // A collection: a face count and one offset, which is as far as the reader
+    // reads before accepting it.
+    beU32(1)
+    beU32(1)
+    beU32(16)
+    for (let i = 0; i < padding; i++) b.u8(0)
+    return b.build()
+  }
+
+  // A cmap with one format-4 subtable covering the requested range, when one
+  // is asked for. `coversCodepoints` reads exactly this and nothing else.
+  const cmap: number[] = []
+  if (options.covers !== undefined) {
+    const [from, to] = options.covers
+    const push16 = (value: number): void => {
+      cmap.push((value >>> 8) & 0xff, value & 0xff)
+    }
+    const push32 = (value: number): void => {
+      cmap.push((value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff)
+    }
+    push16(0) // version
+    push16(1) // one encoding record
+    push16(3) // platform: Windows
+    push16(10) // encoding: UCS-4
+    push32(12) // offset to the subtable
+
+    if ((options.cmapFormat ?? 4) === 12) {
+      // Format 12: 32-bit groups, which is how a font covering anything above
+      // the BMP has to spell its coverage.
+      push16(12)
+      push16(0) // reserved
+      push32(28) // length
+      push32(0) // language
+      push32(1) // one group
+      push32(from)
+      push32(to)
+      push32(1) // startGlyphID
+    } else {
+      push16(4) // format
+      push16(24) // length
+      push16(0) // language
+      push16(4) // segCountX2: two segments
+      push16(4) // searchRange
+      push16(1) // entrySelector
+      push16(0) // rangeShift
+      push16(to) // endCode[0]
+      push16(0xffff) // endCode[1], the required terminator
+      push16(0) // reservedPad
+      push16(from) // startCode[0]
+      push16(0xffff) // startCode[1]
+    }
+  }
+
+  const tables = cmap.length > 0 ? 2 : 1
+  const directoryEnd = 12 + tables * 16
+  beU16(tables)
+  beU16(16 * tables) // searchRange
+  beU16(0) // entrySelector
+  beU16(0) // rangeShift
+
+  if (cmap.length > 0) {
+    b.raw(new TextEncoder().encode('cmap'))
+    beU32(0)
+    beU32(options.danglingCmap === true ? 0x7fffffff : directoryEnd)
+    beU32(cmap.length)
+  }
+  b.raw(new TextEncoder().encode('glyf'))
+  beU32(0) // checksum
+  beU32(directoryEnd + cmap.length)
+  beU32(padding) // length
+
+  b.raw(cmap)
+  for (let i = 0; i < padding; i++) b.u8(0)
+  return b.build()
+}
+
+/**
+ * A `Font` body shaped like the real thing: a name, a preamble of whatever
+ * length, then the length-prefixed font, then trailing fields.
+ *
+ * `preamble` is the part the reader deliberately does not parse — in a real
+ * install it is 80 bytes for one face and 6,452 for another — so a test can
+ * set it to whatever it needs to prove the search does not depend on it.
+ */
+export function fontBody(options: {
+  name: string
+  font: Uint8Array
+  preamble?: number
+  trailing?: number
+}): Uint8Array {
+  const b = new Builder()
+  b.alignedString(options.name)
+  for (let i = 0; i < (options.preamble ?? 24); i++) b.u8(0x7f)
+  b.u8Array(options.font)
+  for (let i = 0; i < (options.trailing ?? 12); i++) b.u8(0x7f)
+  return b.build()
+}
+
 export interface FixtureObject {
   classId: number
   body: Uint8Array

@@ -125,16 +125,35 @@ state it is in. The port uses one button cycling neutral → required → exclud
 fewer targets to hit on a phone, and `aria-pressed` plus a strikethrough mean
 the state is readable without colour.
 
-## Fonts — unresolved, and deliberately not shipped
+## Fonts — not shipped, imported
 
-The Unity build renders `ColumbusMT.ttf`, `Gara_Scenario_Desc.ttf` and a
-Descent symbol font through TextMeshPro. These are commercial faces and their
+The Unity build renders `ColumbusMT.ttf`, `Gara_Scenario_Desc.ttf` and
+`MADGaramondPro.ttf` through TextMeshPro. These are commercial faces and their
 licences do not obviously cover web embedding, which the task notes flag.
 
-They are **named in the CSS behind generic fallbacks, not bundled**. Confirm
-the licences before adding any `@font-face` rule. Until then the UI renders in
-the fallback stack, which is a visual difference from the Unity build and not a
-functional one.
+They are **named in the CSS behind generic fallbacks, and none of them is in
+this repository or in the build**. Confirm the licences before adding any
+`@font-face` rule pointing at a bundled file. For the text faces this means the
+UI renders in the fallback stack, which is a visual difference from the Unity
+build and not a functional one.
+
+### The icons are not a visual difference
+
+Quest prose writes them as markers — `{action}`, `{shield}` — and
+`outputSymbolReplace` rewrites each into a codepoint in `U+F200`–`F20F`. Only
+`MADGaramondPro` fills that range in. Falling back does not make those icons
+plainer, it makes them _absent_: "spend 1 {action}" arrives as "spend 1 ▯" and
+loses the word that made it an instruction.
+
+So the port gets the face the same way it gets the art and the audio — **from
+the player's own install**, which embeds it. `ffgImport` extracts every `Font`
+object it finds, keeps the one that actually covers the range, and writes it to
+`<import>/fonts/`. `packages/app/src/symbolFont.ts` loads it from there into a
+`FontFace` with a matching `unicode-range`, so the same file cannot become the
+page's text font by accident.
+
+Nothing licensed enters the repository or the bundle, and a player who has not
+imported the game sees the named-chip fallback rather than a broken page.
 
 ## Not done here
 
