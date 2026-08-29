@@ -10,7 +10,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { MemoryFileSystem, StoragePaths } from '@valkyrie/platform'
-import { libraryPaths, startQuest, surveyLibrary } from '../src/library.js'
+import { libraryPaths, loadedPackIds, startQuest, surveyLibrary } from '../src/library.js'
 import type { LibraryPaths } from '../src/library.js'
 
 const PATHS: LibraryPaths = {
@@ -82,9 +82,99 @@ describe('surveyLibrary', () => {
     })
     const state = await surveyLibrary(fs, PATHS)
 
-    expect(state.quests).toEqual([
+    expect(state.quests).toMatchObject([
       { id: 'Lynch', path: '/download/Lynch', name: 'Lynch', type: 'MoM', format: 18 },
     ])
+  })
+
+  it('shows the scenario its own title, not the directory it landed in', async () => {
+    // A download names the directory `MoM__ExoticMaterial`; the author called
+    // it "Exotic Material", and that is what a player is looking for. The
+    // title is not in the ini at all — it is a key in the scenario's own text.
+    const fs = await tree({
+      '/download/MoM__ExoticMaterial/quest.ini': `${QUEST}
+[QuestText]
+Localization.English.txt
+`,
+      '/download/MoM__ExoticMaterial/Localization.English.txt':
+        '.,English\nquest.name,Exotic Material\nquest.description,A meteorite fell.\n',
+    })
+
+    expect((await surveyLibrary(fs, PATHS)).quests[0]).toMatchObject({
+      name: 'Exotic Material',
+      description: 'A meteorite fell.',
+    })
+  })
+
+  it('falls back to the directory name when there is no title to read', async () => {
+    const fs = await tree({ '/download/Lynch/quest.ini': QUEST })
+
+    expect((await surveyLibrary(fs, PATHS)).quests[0]?.name).toBe('Lynch')
+  })
+
+  it('does not report the key back as a name', async () => {
+    // `getValue` answers a missing key with the key, so a scenario whose text
+    // has no title would otherwise be listed as "quest.name".
+    const fs = await tree({
+      '/download/Lynch/quest.ini': `${QUEST}
+[QuestText]
+Localization.English.txt
+`,
+      '/download/Lynch/Localization.English.txt': '.,English\nEventStart.text,Hello.\n',
+    })
+
+    expect((await surveyLibrary(fs, PATHS)).quests[0]?.name).toBe('Lynch')
+  })
+
+  it('leaves out a blurb the scenario does not have', async () => {
+    // The title and the blurb are separate keys, and plenty of scenarios carry
+    // one without the other. `getValue` answers a missing key with the key, so
+    // without a guard the card reads "quest.description" as its blurb.
+    const fs = await tree({
+      '/download/Lynch/quest.ini': `${QUEST}
+[QuestText]
+Localization.English.txt
+`,
+      '/download/Lynch/Localization.English.txt': '.,English\nquest.name,The Fall\n',
+    })
+
+    expect((await surveyLibrary(fs, PATHS)).quests[0]).toMatchObject({
+      name: 'The Fall',
+      description: '',
+    })
+  })
+
+  it('carries the cover, the packs and the table it wants', async () => {
+    const fs = await tree({
+      '/download/Lynch/quest.ini': `[Quest]
+format=18
+type=MoM
+packs=MoM1EI MoM1EM
+image=hol.jpg
+difficulty=0.3
+lengthmin=90
+lengthmax=120
+`,
+    })
+
+    const quest = (await surveyLibrary(fs, PATHS)).quests[0]
+
+    expect(quest).toMatchObject({
+      image: '/download/Lynch/hol.jpg',
+      packs: ['MoM1EI', 'MoM1EM'],
+      lengthMin: 90,
+      lengthMax: 120,
+    })
+    // Single precision, because `Quest` reads it as the C# `float` does.
+    expect(quest?.difficulty).toBeCloseTo(0.3, 6)
+  })
+
+  it('reports no cover rather than a path to nothing', async () => {
+    // An empty `image` joined to the directory would be the directory, and an
+    // <img> pointed at a directory is a broken-image icon on every card.
+    const fs = await tree({ '/download/Lynch/quest.ini': QUEST })
+
+    expect((await surveyLibrary(fs, PATHS)).quests[0]?.image).toBe('')
   })
 
   it('ignores a directory that is not a quest', async () => {
@@ -102,6 +192,75 @@ describe('surveyLibrary', () => {
     const state = await surveyLibrary(fs, PATHS)
 
     expect(state.quests.map((q) => q.id)).toContain('Good')
+  })
+})
+
+describe('loadedPackIds', () => {
+  // Not the same as the selection: the base pack is always in, and a pack
+  // pulls in whatever it clones. A scenario asking for a pack the player never
+  // ticked can still be playable because something they did tick brings it.
+  const packIni = (id: string, clone = ''): string =>
+    `[ContentPack]
+name=${id}
+id=${id}
+type=MoM
+${clone === '' ? '' : `clone=${clone}`}
+`
+
+  it('always includes the base pack, selected or not', async () => {
+    const fs = await tree({ '/content/base/content_pack.ini': packIni('MoMBase') })
+
+    expect([...(await loadedPackIds(fs, ['/content/base'], [], 'MoMBase'))]).toEqual(['MoMBase'])
+  })
+
+  it('includes what the player selected', async () => {
+    const fs = await tree({
+      '/content/base/content_pack.ini': packIni('MoMBase'),
+      '/content/sot/content_pack.ini': packIni('SoT'),
+    })
+
+    const loaded = await loadedPackIds(fs, ['/content/base', '/content/sot'], ['SoT'], 'MoMBase')
+
+    expect([...loaded].sort()).toEqual(['MoMBase', 'SoT'])
+  })
+
+  it('brings in what a selected pack clones', async () => {
+    const fs = await tree({
+      '/content/base/content_pack.ini': packIni('MoMBase'),
+      '/content/ck/content_pack.ini': packIni('MoM1CK', 'MoM1EI'),
+      '/content/inv/content_pack.ini': packIni('MoM1EI'),
+    })
+
+    const loaded = await loadedPackIds(
+      fs,
+      ['/content/base', '/content/ck', '/content/inv'],
+      ['MoM1CK'],
+      'MoMBase',
+    )
+
+    expect(loaded.has('MoM1EI')).toBe(true)
+  })
+
+  it('leaves out a pack the player has not selected', async () => {
+    const fs = await tree({
+      '/content/base/content_pack.ini': packIni('MoMBase'),
+      '/content/sot/content_pack.ini': packIni('SoT'),
+    })
+
+    const loaded = await loadedPackIds(fs, ['/content/base', '/content/sot'], [], 'MoMBase')
+
+    expect(loaded.has('SoT')).toBe(false)
+  })
+
+  it('survives a pack whose ini will not parse', async () => {
+    const fs = await tree({
+      '/content/base/content_pack.ini': packIni('MoMBase'),
+      '/content/broken/content_pack.ini': 'not an ini at all',
+    })
+
+    await expect(
+      loadedPackIds(fs, ['/content/base', '/content/broken'], [], 'MoMBase'),
+    ).resolves.toEqual(new Set(['MoMBase']))
   })
 })
 

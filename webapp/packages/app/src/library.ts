@@ -10,17 +10,44 @@
 
 import { loadContent, loadQuest, textureResolver } from '@valkyrie/platform'
 import type { FileSystem, StoragePaths } from '@valkyrie/platform'
-import type { AudioRequest, CameraCommand, Quest } from '@valkyrie/core'
-import { bundleQuest, QuestSession, slidePuzzleLayouts } from '@valkyrie/core'
+import type { AudioRequest, CameraCommand } from '@valkyrie/core'
+import {
+  bundleQuest,
+  CONTENT_PACK_INI,
+  DictionaryI18n,
+  packsToLoad,
+  parseContentPack,
+  Quest,
+  QuestSession,
+  readFromString,
+  slidePuzzleLayouts,
+} from '@valkyrie/core'
 import type { ContentData, QuestComponent, TraitedMonster } from '@valkyrie/core'
 
 export interface QuestEntry {
   /** Directory under the quest root. */
   id: string
   path: string
+  /**
+   * The scenario's own title, from its `Localization.*.txt`.
+   *
+   * Falls back to the directory name, which is what the download called it —
+   * legible, but `MoM__ExoticMaterial` rather than "Exotic Material".
+   */
   name: string
   type: string
   format: number
+  /** The blurb the author wrote, when the scenario carries one. */
+  description: string
+  /** Cover art, as a path in storage. Empty when the scenario ships none. */
+  image: string
+  /** Content packs the scenario needs, already expanded. */
+  packs: readonly string[]
+  difficulty: number
+  lengthMin: number
+  lengthMax: number
+  minHero: number
+  maxHero: number
 }
 
 export interface LibraryState {
@@ -73,24 +100,124 @@ export async function surveyLibrary(fs: FileSystem, paths: LibraryPaths): Promis
   for (const entry of await fs.list(paths.quests)) {
     if (entry.kind !== 'directory') continue
     if (!(await fs.exists(`${entry.path}/quest.ini`))) continue
+    const id = entry.path.slice(entry.path.lastIndexOf('/') + 1)
     try {
-      const loaded = await loadQuest(fs, entry.path)
-      quests.push({
-        id: entry.path.slice(entry.path.lastIndexOf('/') + 1),
-        path: entry.path,
-        // The quest's own name needs its localization; the directory name is
-        // what is available without loading one, and is what the download
-        // named it.
-        name: entry.path.slice(entry.path.lastIndexOf('/') + 1),
-        type: loaded.quest.type,
-        format: loaded.quest.format,
-      })
+      quests.push(await describeQuest(fs, entry.path, id))
     } catch {
       // A half-extracted package should not hide the rest of the library.
     }
   }
 
   return { hasContent: packs.length > 0, packs, quests }
+}
+
+/**
+ * The packs that are actually loaded, given what the player selected.
+ *
+ * `ContentData.GetLoadedPackIDs` in the C#, which the quest list tests a
+ * scenario's requirements against. It is not the same as the selection: the
+ * base pack is always in, and a pack pulls in whatever it clones — so a
+ * scenario asking for a pack the player never ticked may still be playable
+ * because something they did tick brings it along.
+ *
+ * Reads each pack's ini rather than loading the content, because a listing
+ * needs the ids and the clone links and nothing else.
+ */
+export async function loadedPackIds(
+  fs: FileSystem,
+  packDirectories: readonly string[],
+  selected: readonly string[],
+  baseId: string,
+): Promise<Set<string>> {
+  const available: { id: string; clone: string[] }[] = []
+  for (const dir of packDirectories) {
+    try {
+      const pack = parseContentPack(
+        readFromString(await fs.readText(`${dir}/${CONTENT_PACK_INI}`)),
+        {
+          path: dir,
+          importPath: '',
+        },
+      )
+      if (pack !== null) available.push({ id: pack.id, clone: pack.clone })
+    } catch {
+      // A pack that will not parse cannot be loaded either; leaving it out
+      // here matches what the content loader would do with it.
+    }
+  }
+  return packsToLoad(available, selected, baseId)
+}
+
+/**
+ * One scenario, from its `quest.ini` and its title.
+ *
+ * Deliberately not `loadQuest`, which parses every ini in the package to build
+ * the components — a listing needs none of that, and there is a second reason
+ * to avoid it here: `loadQuest` registers the scenario's text as the `qst`
+ * dictionary, so surveying a library used to leave whichever quest happened to
+ * be last answering every `{qst:…}` lookup in the app.
+ *
+ * Two files instead: the ini for the metadata, and the default language's
+ * strings for the name and blurb, which are not in the ini at all.
+ */
+async function describeQuest(fs: FileSystem, path: string, id: string): Promise<QuestEntry> {
+  const ini = readFromString(await fs.readText(`${path}/quest.ini`))
+  const quest = new Quest(path, ini.data.get('Quest') ?? new Map())
+
+  const text = await questStrings(fs, path, quest.defaultLanguage, ini.data.get('QuestText'))
+
+  // `getValue` answers a missing key with the key itself, so "quest.name" is
+  // what an absent title looks like — not an empty string.
+  const string = (key: string, fallback: string): string =>
+    text !== null && text.keyExists(key) ? text.getValue(key) : fallback
+
+  return {
+    id,
+    path,
+    name: string('quest.name', id),
+    type: quest.type,
+    format: quest.format,
+    description: string('quest.description', ''),
+    image: quest.image.length === 0 ? '' : `${path}/${quest.image}`,
+    packs: quest.packs,
+    difficulty: quest.difficulty,
+    lengthMin: quest.lengthMin,
+    lengthMax: quest.lengthMax,
+    minHero: quest.minHero,
+    maxHero: quest.maxHero,
+  }
+}
+
+/**
+ * A scenario's own strings, in its default language.
+ *
+ * `[QuestText]` lists the files, but the name is wanted before any of that is
+ * parsed, so the conventional filename is tried first and the section is only
+ * consulted when it is not there. Returns null rather than throwing: a package
+ * with no readable text still has a directory name to show.
+ */
+async function questStrings(
+  fs: FileSystem,
+  path: string,
+  language: string,
+  section: Map<string, string> | undefined,
+): Promise<DictionaryI18n | null> {
+  const candidates = [`Localization.${language}.txt`, ...(section?.keys() ?? [])]
+
+  for (const file of candidates) {
+    try {
+      const lines = (await fs.readText(`${path}/${file}`)).split(/\r?\n/)
+      const dictionary = new DictionaryI18n(lines)
+      dictionary.defaultLanguage = language
+      dictionary.currentLanguage = language
+      // A file that parsed but holds no title is the wrong file, not the
+      // answer: keep looking rather than reporting the key back as a name.
+      if (dictionary.keyExists('quest.name')) return dictionary
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  return null
 }
 
 /**

@@ -118,6 +118,22 @@ export class Quest {
     return new StringKey('qst', 'quest.authors_short')
   }
 
+  /**
+   * The packs this scenario needs that the player has not got.
+   *
+   * `QuestData.Quest.GetMissingPacks`. The quest list calls it twice over: once
+   * to hide a scenario that cannot be played, and once to mark one that is
+   * shown anyway. Empty means the scenario is playable with what is selected.
+   *
+   * `packs` has already been expanded by then — a scenario asking for the
+   * conversion kit is asking for each of its parts — so this is a plain
+   * membership test against the ids the player has chosen.
+   */
+  missingPacks(selected: Iterable<string>): string[] {
+    const owned = selected instanceof Set ? selected : new Set(selected)
+    return this.packs.filter((pack) => !owned.has(pack))
+  }
+
   private populate(iniData: ContentFields): boolean {
     this.format = intOrZero(iniData.get('format'))
 

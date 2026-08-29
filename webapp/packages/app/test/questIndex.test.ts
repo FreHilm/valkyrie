@@ -16,6 +16,7 @@ import {
   fetchQuestIndex,
   packageUrl,
   parseQuestIndex,
+  questDetailLine,
   questIndexUrl,
 } from '../src/questIndex.js'
 import type { HttpClient } from '@valkyrie/platform'
@@ -188,5 +189,54 @@ synopsys.Spanish=Una historia
     const spanish = browsableQuests(entries, new Set()).find((e) => e.key === 'SpanishOnly')
 
     expect(spanish?.traits.get('Rating')).toEqual(['Unrated'])
+  })
+
+  it('carries the cover, resolved against the package directory', () => {
+    const [exotic] = browsableQuests(entries, new Set())
+
+    expect(exotic?.image).toBe(
+      'https://raw.githubusercontent.com/NPBruce/valkyrie-questdata/master/scenarios/MoM/ExoticMaterial/emlogo.jpg',
+    )
+  })
+
+  it('reports no cover rather than a URL ending in a slash', () => {
+    // A scenario with no `image` would otherwise get the package directory as
+    // its cover, which is a broken-image icon on every card.
+    const spanish = browsableQuests(entries, new Set()).find((e) => e.key === 'SpanishOnly')
+
+    expect(spanish?.image).toBeUndefined()
+  })
+
+  it('says what a scenario asks of the table', () => {
+    const [exotic] = browsableQuests(entries, new Set())
+
+    expect(exotic?.detail).toBe('60–90 min · 2–4 investigators · 5.7/10')
+  })
+})
+
+describe('questDetailLine', () => {
+  it('reads a range as a range and a fixed number as a number', () => {
+    expect(questDetailLine({ lengthMin: 60, lengthMax: 90, minHero: 2, maxHero: 4 })).toEqual([
+      '60–90 min',
+      '2–4 investigators',
+    ])
+    expect(questDetailLine({ lengthMin: 60, lengthMax: 60, minHero: 3, maxHero: 3 })).toEqual([
+      '60 min',
+      '3 investigators',
+    ])
+  })
+
+  it('seats one investigator, not one investigators', () => {
+    expect(questDetailLine({ lengthMin: 70, lengthMax: 90, minHero: 1, maxHero: 1 })).toContain(
+      '1 investigator',
+    )
+  })
+
+  it('leaves out a length the scenario never declared', () => {
+    // Half the index carries no length at all, and "0 min" is worse than
+    // saying nothing.
+    expect(questDetailLine({ lengthMin: 0, lengthMax: 0, minHero: 2, maxHero: 4 })).toEqual([
+      '2–4 investigators',
+    ])
   })
 })

@@ -226,6 +226,101 @@ describe('questSelection', () => {
   })
 })
 
+describe('questSelection as a gallery', () => {
+  // The art is how a player recognises a scenario, so the gallery has to keep
+  // the cover attached to the right card through the filtering — and stay the
+  // same listbox underneath, because that is where the keyboard support is.
+  const quests = [
+    {
+      key: 'vault',
+      display: 'The Deep Vault',
+      traits: new Map([['Type', ['Official']]]),
+      image: 'blob:vault',
+      detail: '90–120 min · 3–5 investigators',
+    },
+    {
+      key: 'gangs',
+      display: 'Gangs of Arkham',
+      traits: new Map([['Type', ['Community']]]),
+      detail: '60 min · 2 investigators',
+      missingPacks: ['SoT'],
+      status: 'Downloaded',
+    },
+  ]
+
+  const gallery = (overrides = {}) =>
+    questSelection({
+      quests,
+      onPick: () => {},
+      title: rawText('Scenarios'),
+      searchLabel: rawText('Search'),
+      emptyMessage: rawText('None'),
+      gallery: true,
+      ...overrides,
+    })
+
+  it('draws each scenario as a card with its cover', () => {
+    const screen = gallery()
+    const art = screen.querySelector<HTMLImageElement>('.vk-quest-card__art')
+
+    expect(screen.querySelectorAll('.vk-quest-card')).toHaveLength(2)
+    expect(art?.getAttribute('src')).toBe('blob:vault')
+    // Decorative: the title beside it already names the scenario.
+    expect(art?.getAttribute('alt')).toBe('')
+  })
+
+  it('keeps a card without a cover the same shape as one with', () => {
+    // A hole in the grid where one scenario ships no art reads as broken.
+    const screen = gallery()
+    const cards = [...screen.querySelectorAll('.vk-quest-card')]
+
+    expect(cards.every((card) => card.querySelector('.vk-quest-card__frame') !== null)).toBe(true)
+    expect(screen.querySelector('.vk-quest-card__initial')?.textContent).toBe('G')
+  })
+
+  it('puts the cover on the card it belongs to, whatever the sort order', () => {
+    // The list sorts by name, so the cards come back in the other order from
+    // the one they were given in. A card showing another scenario's cover is
+    // the failure this guards.
+    const screen = gallery()
+    const cards = [...screen.querySelectorAll('.vk-quest-card')]
+    const withArt = cards.find((card) => card.querySelector('.vk-quest-card__art') !== null)
+
+    expect(withArt?.querySelector('.vk-quest-card__name')?.textContent).toBe('The Deep Vault')
+  })
+
+  it('shows what a scenario asks of the table', () => {
+    expect(gallery().textContent).toContain('90–120 min · 3–5 investigators')
+  })
+
+  it('says which packs a scenario is missing', () => {
+    const screen = gallery()
+
+    expect(screen.querySelector('.vk-quest-card__badge--missing')?.textContent).toBe('Needs SoT')
+    expect(screen.querySelectorAll('.vk-quest-card--missing')).toHaveLength(1)
+  })
+
+  it('is still the listbox, so the keyboard still works', () => {
+    const screen = gallery()
+
+    expect(screen.querySelector('[role="listbox"]')).not.toBeNull()
+    expect(screen.querySelectorAll('[role="option"]')).toHaveLength(2)
+  })
+
+  it('lists names rather than cards when the gallery is off', () => {
+    const screen = questSelection({
+      quests,
+      onPick: () => {},
+      title: rawText('Scenarios'),
+      searchLabel: rawText('Search'),
+      emptyMessage: rawText('None'),
+    })
+
+    expect(screen.querySelector('.vk-quest-card')).toBeNull()
+    expect(screen.textContent).toContain('The Deep Vault')
+  })
+})
+
 describe('questDetails', () => {
   it('shows the name, description and actions', () => {
     const start = vi.fn()

@@ -479,17 +479,21 @@ body {
 
 /* ---- menus and quest browsing ---- */
 /*
- * The title screen.
+ * The menu system's ground.
  *
- * The artwork is dark in both themes, so this one screen commits to a
- * light-on-dark treatment rather than following the viewer's: a scrim keeps
- * the column readable wherever the picture happens to be bright, and the menu
- * sits on it as a translucent panel so the art carries on behind.
+ * The artwork is dark in both themes, so every screen outside a running game
+ * commits to a light-on-dark treatment rather than following the viewer's: a
+ * scrim keeps the content readable wherever the picture happens to be bright,
+ * and panels sit on it translucent so the art carries on behind.
  *
  * The background is fixed and painted behind the content rather than set on
- * the panel, so it fills the viewport whatever the menu's height is.
+ * the panel, so it fills the viewport whatever a screen's height is, and does
+ * not jump between screens of different lengths.
+ *
+ * The board is deliberately not one of these. A game in progress is the thing
+ * being looked at, and a picture behind it would compete with the tiles.
  */
-.vk-shell--menu {
+.vk-shell--art {
   position: relative;
   background: transparent;
   border-color: transparent;
@@ -497,7 +501,7 @@ body {
   min-height: 100dvh;
   isolation: isolate;
 }
-.vk-shell--menu::before {
+.vk-shell--art::before {
   content: '';
   position: fixed;
   inset: 0;
@@ -547,25 +551,61 @@ body {
   }
 }
 
-.vk-shell--menu > .vk-text {
+.vk-shell--art > .vk-text {
   color: #f6f1e6;
   text-shadow: 0 calc(var(--u) * 0.06) calc(var(--u) * 0.3) rgb(0 0 0 / 85%);
 }
-.vk-shell--menu .vk-shell__version {
+.vk-shell--art .vk-shell__version {
   color: #c9c0ae;
 }
-.vk-shell--menu .vk-menu {
+/*
+ * Panels on the artwork.
+ *
+ * Translucent rather than opaque, so the picture carries on behind rather than
+ * being covered by the first screen that has anything on it. The shell itself
+ * is excluded: it is the full-height container these sit in, and giving it a
+ * second scrim would double the darkening.
+ */
+.vk-shell--art .vk-panel:not(.vk-shell) {
   background: rgb(14 12 18 / 62%);
   border-color: rgb(246 241 230 / 18%);
   box-shadow: 0 calc(var(--u) * 0.3) calc(var(--u) * 1.2) rgb(0 0 0 / 55%);
+  color: #f2ece1;
 }
 @supports (backdrop-filter: blur(1px)) {
-  .vk-shell--menu .vk-menu {
+  .vk-shell--art .vk-panel:not(.vk-shell) {
     background: rgb(14 12 18 / 42%);
     backdrop-filter: blur(calc(var(--u) * 0.1)) saturate(120%);
   }
 }
-.vk-shell--menu .vk-menu > .vk-text {
+/* Text inside those panels follows the panel, not the viewer's theme: the
+   ground under it is the artwork either way. */
+.vk-shell--art .vk-panel .vk-text,
+.vk-shell--art .vk-filters__name,
+.vk-shell--art .vk-search__label,
+.vk-shell--art .vk-results__count {
+  color: #f6f1e6;
+}
+.vk-shell--art .vk-filters__name,
+.vk-shell--art .vk-search__label,
+.vk-shell--art .vk-results__count {
+  color: #c9c0ae;
+}
+/* Controls on the dark ground: the surface tokens are the viewer's theme and
+   would come out near-white on a light system. */
+.vk-shell--art .vk-button:not(.vk-button--primary),
+.vk-shell--art .vk-search__input {
+  background: rgb(28 24 34 / 76%);
+  border-color: rgb(246 241 230 / 22%);
+  color: #f2ece1;
+}
+.vk-shell--art .vk-button:not(.vk-button--primary):hover:not(:disabled) {
+  border-color: rgb(246 241 230 / 52%);
+}
+.vk-shell--art .vk-list__row {
+  background: none;
+}
+.vk-shell--art .vk-menu > .vk-text {
   color: #f6f1e6;
 }
 
@@ -586,6 +626,140 @@ body {
   to {
     opacity: 1;
   }
+}
+
+/*
+ * The scenario gallery.
+ *
+ * A grid rather than a list because a player recognises a scenario by its
+ * cover before its name. `auto-fill` with a minimum rather than a column count
+ * so the same rule serves a phone and a wide window — the cards reflow instead
+ * of the page needing breakpoints per screen.
+ *
+ * Still a listbox underneath: the roving tabindex, the arrow keys and the
+ * announced count are the list component's, and laying it out as a grid does
+ * not change what it is.
+ */
+.vk-list--gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--u) * 9), 1fr));
+  gap: calc(var(--u) * 0.6);
+  max-height: none;
+}
+.vk-list--gallery .vk-list__row {
+  padding: 0;
+  background: none;
+  border-radius: calc(var(--vk-radius) * 2);
+  overflow: hidden;
+}
+.vk-list--gallery .vk-list__row--selectable {
+  display: block;
+  min-height: 0;
+}
+
+.vk-quest-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: rgb(14 12 18 / 62%);
+  border: 1px solid rgb(246 241 230 / 14%);
+  border-radius: calc(var(--vk-radius) * 2);
+  overflow: hidden;
+  transition:
+    transform 120ms ease-out,
+    border-color 120ms ease-out;
+}
+@supports (backdrop-filter: blur(1px)) {
+  .vk-quest-card {
+    background: rgb(14 12 18 / 46%);
+    backdrop-filter: blur(calc(var(--u) * 0.08)) saturate(120%);
+  }
+}
+.vk-list__row--selectable:hover .vk-quest-card {
+  border-color: rgb(246 241 230 / 42%);
+  transform: translateY(calc(var(--u) * -0.08));
+}
+.vk-list__row[aria-selected='true'] .vk-quest-card {
+  border-color: var(--vk-accent);
+}
+
+/*
+ * A fixed frame for art of every shape.
+ *
+ * The covers range from square to 16:9, and letting each set its own height
+ * gives a grid of ragged tiles that reads as broken rather than varied. The
+ * frame is constant and the picture fills it.
+ */
+.vk-quest-card__frame {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: linear-gradient(160deg, #2a2430 0%, #14111a 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.vk-quest-card__art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+/* Standing in for a cover the scenario does not ship, so the grid stays a
+   grid rather than growing a hole where one card has no picture. */
+.vk-quest-card__initial {
+  font-family: var(--vk-font-body);
+  font-size: calc(var(--u) * 2.4);
+  color: rgb(246 241 230 / 34%);
+  line-height: 1;
+}
+
+.vk-quest-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.15);
+  padding: calc(var(--u) * 0.4) calc(var(--u) * 0.5) calc(var(--u) * 0.5);
+}
+.vk-quest-card__name {
+  font-family: var(--vk-font-body);
+  font-size: calc(var(--u) * 0.82);
+  font-weight: 600;
+  color: #f6f1e6;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+.vk-quest-card__detail {
+  font-family: var(--vk-font-ui);
+  font-size: calc(var(--u) * 0.6);
+  color: #c9c0ae;
+  font-variant-numeric: tabular-nums;
+}
+.vk-quest-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--u) * 0.2);
+  margin-top: calc(var(--u) * 0.15);
+}
+.vk-quest-card__badge {
+  font-family: var(--vk-font-ui);
+  font-size: calc(var(--u) * 0.52);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: calc(var(--u) * 0.1) calc(var(--u) * 0.3);
+  border-radius: 0.9em;
+  border: 1px solid rgb(246 241 230 / 30%);
+  color: #e6dfd2;
+  white-space: nowrap;
+}
+.vk-quest-card__badge--missing {
+  border-color: rgb(196 87 74 / 70%);
+  color: #e8a89f;
+}
+/* Shown, not hidden, when the filter is off: the player can see it exists and
+   why they cannot play it. */
+.vk-quest-card--missing .vk-quest-card__frame {
+  filter: grayscale(85%);
+  opacity: 0.55;
 }
 
 .vk-quest-details {

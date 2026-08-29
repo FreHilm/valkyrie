@@ -444,6 +444,40 @@ describe('Quest metadata', () => {
     ])
   })
 
+  describe('missingPacks', () => {
+    // `QuestData.Quest.GetMissingPacks`. The quest list hides a scenario the
+    // player cannot put on the table, so a wrong answer either hides one they
+    // own or offers one they cannot play.
+    const lynch = build({ format: '21', packs: 'MoM1EI MoM1EM MoM1ET' })
+
+    it('names every pack the player has not got', () => {
+      expect(lynch.missingPacks(['MoM1EI'])).toEqual(['MoM1EM', 'MoM1ET'])
+    })
+
+    it('is empty when the player has all of them', () => {
+      expect(lynch.missingPacks(['MoM1EI', 'MoM1EM', 'MoM1ET'])).toEqual([])
+    })
+
+    it('is empty for a scenario that asks for nothing', () => {
+      expect(build({ format: '21' }).missingPacks([])).toEqual([])
+    })
+
+    it('ignores packs the player has that this scenario never asked for', () => {
+      expect(lynch.missingPacks(['MoM1EI', 'MoM1EM', 'MoM1ET', 'SoT'])).toEqual([])
+    })
+
+    it('answers against an expanded requirement, not the shorthand', () => {
+      // `packs=MoM1E` is one word in the ini and three packs on the table.
+      const shorthand = build({ format: '21', packs: 'MoM1E' })
+
+      expect(shorthand.missingPacks(['MoM1E'])).toEqual(['MoM1EI', 'MoM1EM', 'MoM1ET'])
+    })
+
+    it('takes a set as readily as a list', () => {
+      expect(lynch.missingPacks(new Set(['MoM1EI', 'MoM1EM', 'MoM1ET']))).toEqual([])
+    })
+  })
+
   it('adds the conversion kit for old MoM scenarios that need it', () => {
     expect(
       new Quest('HolyMansion', fields({ format: '16' }), {

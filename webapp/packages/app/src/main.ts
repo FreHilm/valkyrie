@@ -96,8 +96,23 @@ import type {
 import { acquireQuest } from './acquire.js'
 import { devManifest, loadFromDevServer } from './devLoad.js'
 import { clearStage, lastStage, stage } from './trace.js'
-import { browsableQuests, byRecency, fetchQuestIndex, packageUrl } from './questIndex.js'
-import { libraryPaths, normaliseQuestPath, startQuest, surveyLibrary } from './library.js'
+import {
+  browsableQuests,
+  byRecency,
+  difficultyBand,
+  fetchQuestIndex,
+  lengthBand,
+  packageUrl,
+  questDetailLine,
+} from './questIndex.js'
+import {
+  libraryPaths,
+  loadedPackIds,
+  normaliseQuestPath,
+  startQuest,
+  surveyLibrary,
+} from './library.js'
+import type { QuestEntry } from './library.js'
 import { monsterProfile, questArt, questUiElements, tileImages } from './questArt.js'
 import { monsterDialogView } from './monsterView.js'
 import { puzzleRenderer } from './puzzleView.js'
@@ -137,6 +152,24 @@ async function imageSize(url: string): Promise<{ width: number; height: number }
  * A quest with no events, so the activation demo exercises the round
  * controller without a scenario behind it.
  */
+/**
+ * The only game this port plays.
+ *
+ * Descent shares the engine and most of the content model, and the pieces are
+ * all here — but none of it has been played through, and a Descent scenario in
+ * a Mansions list is a scenario that cannot be started. So the shell names one
+ * game rather than offering both and meaning one.
+ */
+const GAME_TYPE = 'MoM'
+
+/** The pack that is always loaded, whatever the player has selected. */
+const BASE_PACK_ID = 'MoMBase'
+
+/** Where everything lives in OPFS. The same layout for every screen. */
+function storagePaths(): StoragePaths {
+  return new StoragePaths({ appData: '/appdata', content: '/content', temp: '/tmp' }, GAME_TYPE)
+}
+
 const NO_EVENTS: EventsView = {
   current: null,
   monsterImage: null,
@@ -150,6 +183,24 @@ const NO_EVENTS: EventsView = {
 const mount = document.getElementById('app')
 if (mount === null) throw new Error('No #app element to mount into')
 const root: HTMLElement = mount
+
+/*
+ * The menu artwork, which every screen outside a running game is drawn on.
+ *
+ * Served from `public/` rather than bundled: the file is not in the
+ * repository, and a static import of a missing one fails the build. Absent,
+ * the browser drops the layer and the gradients below it are what shows — so
+ * the screens still look deliberate rather than broken.
+ *
+ * Resolved against `document.baseURI` because the build is relative-based
+ * (`base: './'`), so a bare path would break under a subdirectory. Set once at
+ * startup: it is inherited, and setting it per screen made it the title
+ * screen's alone.
+ */
+root.style.setProperty(
+  '--vk-menu-cover',
+  `url("${new URL('menu-cover.webp', document.baseURI).href}")`,
+)
 
 installUnits(document.documentElement, window)
 
@@ -207,17 +258,6 @@ function menu(): void {
       `Stopped at: ${died.what}${died.detail === undefined ? '' : `\n${died.detail}`}`,
     )
   }
-  // Optional artwork, served from `public/` rather than bundled: the file is
-  // not in the repository, and a static import of a missing one fails the
-  // build. Absent, the browser drops the layer and the gradients below it are
-  // what shows — so the screen still looks deliberate rather than broken.
-  //
-  // Resolved against `document.baseURI` because the build is relative-based
-  // (`base: './'`), so a bare path would break under a subdirectory.
-  root.style.setProperty(
-    '--vk-menu-cover',
-    `url("${new URL('menu-cover.webp', document.baseURI).href}")`,
-  )
   const logo = el('img', {
     class: 'vk-shell__logo',
     // Decorative: the heading beside it already names the app.
@@ -230,7 +270,7 @@ function menu(): void {
   })
   show(
     panel({
-      class: 'vk-shell vk-shell--menu',
+      class: ['vk-shell', 'vk-shell--art'],
       children: [
         logo,
         label(rawText('Valkyrie'), { size: 'large', heading: 1 }),
@@ -270,7 +310,7 @@ function menu(): void {
 function quests(): void {
   show(
     panel({
-      class: 'vk-shell',
+      class: ['vk-shell', 'vk-shell--art'],
       children: [
         backTo(menu),
         questSelection({
@@ -290,7 +330,7 @@ function details(id: string): void {
   const quest = QUESTS.find((q) => q.key === id)
   show(
     panel({
-      class: 'vk-shell',
+      class: ['vk-shell', 'vk-shell--art'],
       children: [
         backTo(quests),
         questDetails({
@@ -320,7 +360,7 @@ function heroesDemo(): void {
     countLabel: (chosen, low, high) => `${chosen} chosen, ${low} to ${high} needed`,
     onConfirm: () => boardDemo(),
   })
-  show(panel({ class: 'vk-shell', children: [backTo(menu), selection.element] }))
+  show(panel({ class: ['vk-shell', 'vk-shell--art'], children: [backTo(menu), selection.element] }))
 }
 
 function eventDemo(): void {
@@ -338,7 +378,7 @@ function eventDemo(): void {
     text: 'Behind it, the smell is worse.',
     buttons: [{ text: 'Continue', onPress: menu }],
   }
-  show(panel({ class: 'vk-shell', children: [backTo(menu), dialog.element] }))
+  show(panel({ class: ['vk-shell', 'vk-shell--art'], children: [backTo(menu), dialog.element] }))
 }
 
 /**
@@ -426,7 +466,7 @@ function activationDemo(): void {
 
   show(
     panel({
-      class: 'vk-shell',
+      class: ['vk-shell', 'vk-shell--art'],
       children: [backTo(menu), dialog.element, status, label(rawText('Quest log')), entries],
     }),
   )
@@ -482,7 +522,7 @@ function monsterDemo(): void {
 
   show(
     panel({
-      class: 'vk-shell',
+      class: ['vk-shell', 'vk-shell--art'],
       children: [backTo(menu), dialog.element, status, label(rawText('Quest log')), entries],
     }),
   )
@@ -501,15 +541,13 @@ async function browseScenarios(): Promise<void> {
   const status = el('p', { class: 'vk-shell__status', attrs: { 'aria-live': 'polite' } })
   show(
     panel({
-      class: 'vk-shell',
+      class: ['vk-shell', 'vk-shell--art'],
       children: [backTo(menu), label(rawText('Fetching the scenario list…')), status],
     }),
   )
 
   const fs = new OpfsFileSystem(navigator.storage as unknown as StorageManagerLike)
-  const paths = libraryPaths(
-    new StoragePaths({ appData: '/appdata', content: '/content', temp: '/tmp' }, 'MoM'),
-  )
+  const paths = libraryPaths(storagePaths())
 
   let entries
   try {
@@ -522,9 +560,21 @@ async function browseScenarios(): Promise<void> {
     return
   }
 
-  const installed = new Set(
-    (await surveyLibrary(fs, paths).catch(() => null))?.quests.map((q) => q.id) ?? [],
-  )
+  const state = await surveyLibrary(fs, paths).catch(() => null)
+  const installed = new Set(state?.quests.map((q) => q.id) ?? [])
+
+  // The same test the local list uses: a scenario asking for a box the player
+  // has not selected cannot be played, so there is no point offering it.
+  const config = await loadConfig(fs, storagePaths()).catch(() => null)
+  const owned = await loadedPackIds(
+    fs,
+    state?.packs ?? [],
+    config?.getPacks(GAME_TYPE) ?? [],
+    BASE_PACK_ID,
+  ).catch(() => new Set<string>())
+
+  const playable = entries.filter((entry) => entry.quest.missingPacks(owned).length === 0)
+  const hidden = entries.length - playable.length
 
   const download = async (id: string): Promise<void> => {
     const entry = entries.find((e) => e.id === id)
@@ -548,16 +598,27 @@ async function browseScenarios(): Promise<void> {
 
   show(
     panel({
-      class: 'vk-shell',
+      class: ['vk-shell', 'vk-shell--art'],
       children: [
         backTo(menu),
         questSelection({
-          quests: browsableQuests(entries, installed),
+          quests: browsableQuests(playable, installed),
           onPick: (id) => void download(id),
-          title: rawText(`Scenarios (${String(entries.length)})`),
+          title: rawText(`Scenarios (${String(playable.length)})`),
           searchLabel: rawText('Search scenarios'),
           emptyMessage: rawText('No scenario matches those filters.'),
+          gallery: true,
+          countLabel: (count) => `${String(count)} scenarios`,
         }),
+        hidden === 0
+          ? null
+          : label(
+              rawText(
+                `${String(hidden)} more need content you have not selected. ` +
+                  'Choose your boxes under Content to see them.',
+              ),
+              { class: 'vk-shell__status' },
+            ),
         status,
       ],
     }),
@@ -579,7 +640,7 @@ async function devLoad(): Promise<void> {
 
   show(
     panel({
-      class: 'vk-shell',
+      class: ['vk-shell', 'vk-shell--art'],
       children: [
         backTo(menu),
         label(rawText('Load from dev server'), { size: 'large', heading: 1 }),
@@ -606,9 +667,7 @@ async function devLoad(): Promise<void> {
   }
 
   const fs = new OpfsFileSystem(navigator.storage as unknown as StorageManagerLike)
-  const paths = libraryPaths(
-    new StoragePaths({ appData: '/appdata', content: '/content', temp: '/tmp' }, 'MoM'),
-  )
+  const paths = libraryPaths(storagePaths())
 
   try {
     const result = await loadFromDevServer(
@@ -662,9 +721,7 @@ function addScenario(): void {
     status.textContent = 'Downloading…'
     try {
       const fs = new OpfsFileSystem(navigator.storage as unknown as StorageManagerLike)
-      const paths = libraryPaths(
-        new StoragePaths({ appData: '/appdata', content: '/content', temp: '/tmp' }, 'MoM'),
-      )
+      const paths = libraryPaths(storagePaths())
       const result = await acquireQuest(url, {
         fs,
         http: new FetchHttpClient(),
@@ -687,7 +744,7 @@ function addScenario(): void {
 
   show(
     panel({
-      class: 'vk-shell',
+      class: ['vk-shell', 'vk-shell--art'],
       children: [
         backTo(menu),
         label(rawText('Add a scenario'), { size: 'large', heading: 1 }),
@@ -754,10 +811,7 @@ function importDemo(): void {
       }
 
       const fs = new OpfsFileSystem(navigator.storage as unknown as StorageManagerLike)
-      const paths = new StoragePaths(
-        { appData: '/appdata', content: '/content', temp: '/tmp' },
-        'MoM',
-      )
+      const paths = storagePaths()
       const result = await importFfgApp({
         fs,
         source,
@@ -780,7 +834,7 @@ function importDemo(): void {
     },
   })
 
-  show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
+  show(panel({ class: ['vk-shell', 'vk-shell--art'], children: [backTo(menu), screen.element] }))
 }
 
 /**
@@ -796,9 +850,7 @@ async function library(): Promise<void> {
   // The DOM lib's FileSystemDirectoryHandle omits `entries()`, which the File
   // System Access spec defines and every implementation ships; the types lag.
   const fs = new OpfsFileSystem(navigator.storage as unknown as StorageManagerLike)
-  const paths = libraryPaths(
-    new StoragePaths({ appData: '/appdata', content: '/content', temp: '/tmp' }, 'MoM'),
-  )
+  const paths = libraryPaths(storagePaths())
 
   let state
   try {
@@ -807,21 +859,59 @@ async function library(): Promise<void> {
     state = { hasContent: false, packs: [], quests: [] }
   }
 
-  const children = [backTo(menu), label(rawText('Play a quest'), { size: 'large', heading: 1 })]
+  // What is on the table, so a scenario asking for a box the player has not
+  // got can be told apart from one they can start right now.
+  const config = await loadConfig(fs, storagePaths()).catch(() => null)
+  const owned = await loadedPackIds(
+    fs,
+    state.packs,
+    config?.getPacks(GAME_TYPE) ?? [],
+    BASE_PACK_ID,
+  ).catch(() => new Set<string>())
+
+  // Only this game's scenarios. The library holds whatever has been
+  // downloaded, and a Descent quest in a Mansions list is not a scenario the
+  // player can start — it is a different game.
+  const mine = state.quests.filter((quest) => quest.type === GAME_TYPE)
+
+  const entries = mine.map((quest) => ({
+    quest,
+    missing: quest.packs.filter((pack) => !owned.has(pack)),
+  }))
+  const playable = entries.filter((entry) => entry.missing.length === 0)
+
+  // Object URLs, revoked when the screen goes.
+  const covers = new Map<string, string>()
+  for (const { quest } of entries) {
+    if (quest.image.length === 0) continue
+    try {
+      covers.set(
+        quest.id,
+        URL.createObjectURL(new Blob([new Uint8Array(await fs.readBytes(quest.image))])),
+      )
+    } catch {
+      // A cover that will not read is a card without one, not a broken screen.
+    }
+  }
+
+  const children: (Node | null)[] = [
+    backTo(menu),
+    label(rawText('Play a quest'), { size: 'large', heading: 1 }),
+  ]
 
   if (!state.hasContent) {
     children.push(
       label(
         rawText(
           'No content is imported yet. Valkyrie needs the art and audio from a ' +
-            'licensed Mansions of Madness or Descent install, which stay on this ' +
-            'device and are never uploaded.',
+            'licensed Mansions of Madness install, which stay on this device and ' +
+            'are never uploaded.',
         ),
       ),
     )
   }
 
-  if (state.quests.length === 0) {
+  if (mine.length === 0) {
     children.push(
       label(
         rawText(
@@ -832,42 +922,83 @@ async function library(): Promise<void> {
       ),
     )
   } else {
+    const start = (path: string): void => {
+      // Without this a failure to start is silent, which reads as the card
+      // doing nothing at all.
+      play(fs, paths, path).catch((error: unknown) => {
+        show(
+          panel({
+            class: ['vk-shell', 'vk-shell--art'],
+            children: [
+              backTo(menu),
+              label(rawText('That quest could not be started'), { heading: 2, size: 'medium' }),
+              label(rawText(error instanceof Error ? error.message : String(error))),
+            ],
+          }),
+        )
+      })
+    }
+
     children.push(
-      mainMenu({
-        title: rawText('Scenarios'),
-        actions: state.quests.map((quest) => ({
-          label: rawText(`${quest.name} (${quest.type})`),
-          onPress: () => {
-            // Without this a failure to start is silent, which reads as the
-            // button doing nothing at all.
-            play(fs, paths, quest.path).catch((error: unknown) => {
-              show(
-                panel({
-                  class: 'vk-shell',
-                  children: [
-                    backTo(menu),
-                    label(rawText('That quest could not be started'), {
-                      heading: 2,
-                      size: 'medium',
-                    }),
-                    label(rawText(error instanceof Error ? error.message : String(error))),
-                  ],
-                }),
-              )
-            })
-          },
+      questSelection({
+        quests: playable.map(({ quest }) => ({
+          key: quest.id,
+          display: quest.name,
+          traits: questTraits(quest),
+          description: quest.description,
+          ...(covers.has(quest.id) ? { image: covers.get(quest.id) as string } : {}),
+          detail: questDetail(quest),
         })),
+        onPick: (id) => {
+          const found = playable.find(({ quest }) => quest.id === id)
+          if (found !== undefined) start(found.quest.path)
+        },
+        title: rawText('Scenarios'),
+        searchLabel: rawText('Search scenarios'),
+        emptyMessage: rawText('No scenario matches those filters.'),
+        gallery: true,
+        countLabel: (count) => `${String(count)} scenarios`,
       }),
     )
   }
 
+  const hidden = entries.length - playable.length
   children.push(
-    label(rawText(`${state.packs.length} content packs, ${state.quests.length} scenarios`), {
-      class: 'vk-shell__status',
-    }),
+    label(
+      rawText(
+        `${String(playable.length)} scenarios` +
+          (hidden === 0 ? '' : `, ${String(hidden)} hidden for content you have not selected`),
+      ),
+      { class: 'vk-shell__status' },
+    ),
   )
 
-  show(panel({ class: 'vk-shell', children }))
+  show(panel({ class: ['vk-shell', 'vk-shell--art'], children }))
+  onLeave(() => {
+    for (const url of covers.values()) URL.revokeObjectURL(url)
+  })
+}
+
+/**
+ * The facts a player picks a scenario by, on one line.
+ *
+ * Length and seats are shared with the online browser, so a scenario reads the
+ * same before and after it is downloaded; difficulty stands in for the rating,
+ * which only the store knows.
+ */
+function questDetail(quest: QuestEntry): string {
+  const parts = questDetailLine(quest)
+  if (quest.difficulty > 0) parts.push(difficultyBand(quest.difficulty))
+  return parts.join(' · ')
+}
+
+/** The trait groups the gallery filters by, matching the online browser's. */
+function questTraits(quest: QuestEntry): Map<string, string[]> {
+  return new Map<string, string[]>([
+    ['Length', [lengthBand(quest.lengthMin, quest.lengthMax)]],
+    ['Investigators', [`${String(quest.minHero)}–${String(quest.maxHero)}`]],
+    ['Difficulty', [difficultyBand(quest.difficulty)]],
+  ])
 }
 
 /** Loads a scenario from storage and plays it. */
@@ -894,10 +1025,7 @@ async function play(
   }
   // What the player told the content screen they own. `Game.SelectQuest`
   // reads the same section before pulling up the quest list.
-  const storage = new StoragePaths(
-    { appData: '/appdata', content: '/content', temp: '/tmp' },
-    'MoM',
-  )
+  const storage = storagePaths()
   const config = await loadConfig(fs, storage)
 
   // Built before the quest starts, because a scenario asks for its opening
@@ -1080,7 +1208,7 @@ async function play(
       quest,
       artUrl: buildUrl,
       present: (element) => {
-        show(panel({ class: 'vk-shell', children: [backTo(menu), element] }))
+        show(panel({ class: ['vk-shell', 'vk-shell--art'], children: [backTo(menu), element] }))
       },
     })
     session.start()
@@ -1372,10 +1500,12 @@ async function play(
       minutes: Math.floor((Date.now() - startedAt) / 60000),
       rounds: Math.round(session.runtime.vars.getValue('#round')),
     })
-    show(panel({ class: 'vk-shell', children: [backTo(menu), summary.element] }))
+    show(panel({ class: ['vk-shell', 'vk-shell--art'], children: [backTo(menu), summary.element] }))
   }
   /** `GameMenu.Save`: the save slots, in the direction that writes. */
   const backToBoard = (): void => {
+    // No art layer here, and this is the one screen without it: the board is
+    // what the players are reading, and a picture behind it competes.
     show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
   }
 
@@ -1408,7 +1538,7 @@ async function play(
         rejection: rejectionText(entry.rejection),
       })),
     )
-    show(panel({ class: 'vk-shell', children: [backTo(menu), slots.element] }))
+    show(panel({ class: ['vk-shell', 'vk-shell--art'], children: [backTo(menu), slots.element] }))
   }
 
   backToBoard()
@@ -1477,7 +1607,7 @@ function logDemo(): void {
   }
   render()
 
-  show(panel({ class: 'vk-shell', children: [backTo(menu), log.element] }))
+  show(panel({ class: ['vk-shell', 'vk-shell--art'], children: [backTo(menu), log.element] }))
 }
 
 /** The item inventory, inspecting through the real event engine. */
@@ -1496,7 +1626,9 @@ function inventoryDemo(): void {
     { id: 'QItemLantern', name: 'A guttering lantern' },
   ])
 
-  show(panel({ class: 'vk-shell', children: [backTo(menu), view.element, status] }))
+  show(
+    panel({ class: ['vk-shell', 'vk-shell--art'], children: [backTo(menu), view.element, status] }),
+  )
 }
 
 /**
@@ -1515,7 +1647,7 @@ function endGameDemo(): void {
     minutes: 95,
     rounds: 12,
   })
-  show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
+  show(panel({ class: ['vk-shell', 'vk-shell--art'], children: [backTo(menu), screen.element] }))
 }
 
 /**
@@ -1527,10 +1659,7 @@ function endGameDemo(): void {
  */
 async function resumeQuest(): Promise<void> {
   const fs = new OpfsFileSystem(navigator.storage as unknown as StorageManagerLike)
-  const storage = new StoragePaths(
-    { appData: '/appdata', content: '/content', temp: '/tmp' },
-    'MoM',
-  )
+  const storage = storagePaths()
   const context = { fs, paths: storage, currentVersion: SAVE_VERSION }
 
   const status = el('p', { class: 'vk-shell__status', attrs: { 'aria-live': 'polite' } })
@@ -1548,7 +1677,12 @@ async function resumeQuest(): Promise<void> {
       })()
     },
   })
-  show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element, status] }))
+  show(
+    panel({
+      class: ['vk-shell', 'vk-shell--art'],
+      children: [backTo(menu), screen.element, status],
+    }),
+  )
 
   const metadata = await listSaves(context)
   const urls: string[] = []
@@ -1637,7 +1771,6 @@ async function questFilesFor(
 }
 
 /** `GameType.BaseContentPackId()`, which is loaded whatever is selected. */
-const BASE_PACK_ID = 'MoMBase'
 
 /**
  * Which boxes the player owns, written straight through to `config.ini`.
@@ -1648,10 +1781,7 @@ const BASE_PACK_ID = 'MoMBase'
  */
 async function contentSelectScreen(): Promise<void> {
   const fs = new OpfsFileSystem(navigator.storage as unknown as StorageManagerLike)
-  const storage = new StoragePaths(
-    { appData: '/appdata', content: '/content', temp: '/tmp' },
-    'MoM',
-  )
+  const storage = storagePaths()
   const paths = libraryPaths(storage)
   const config = await loadConfig(fs, storage, autoSaveConfig(fs, storage))
 
@@ -1711,7 +1841,7 @@ async function contentSelectScreen(): Promise<void> {
   }
 
   await render()
-  show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element] }))
+  show(panel({ class: ['vk-shell', 'vk-shell--art'], children: [backTo(menu), screen.element] }))
   onLeave(() => {
     for (const url of urls.values()) URL.revokeObjectURL(url)
     urls.clear()
@@ -1757,7 +1887,12 @@ function optionsDemo(): void {
     ...settings,
   })
 
-  show(panel({ class: 'vk-shell', children: [backTo(menu), screen.element, status] }))
+  show(
+    panel({
+      class: ['vk-shell', 'vk-shell--art'],
+      children: [backTo(menu), screen.element, status],
+    }),
+  )
 }
 
 /**
@@ -1842,7 +1977,7 @@ async function storage(): Promise<void> {
 
   show(
     panel({
-      class: 'vk-shell',
+      class: ['vk-shell', 'vk-shell--art'],
       title: rawText('Storage'),
       children: [
         backTo(menu),

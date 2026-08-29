@@ -14,9 +14,9 @@ import type { SelectionItem, TraitGroup } from './traitFilter.js'
 import { rawText, resolve } from './text.js'
 import type { Text } from './text.js'
 
-export interface SelectionListOptions {
-  items: readonly SelectionItem[]
-  onSelect: (item: SelectionItem) => void
+export interface SelectionListOptions<T extends SelectionItem = SelectionItem> {
+  items: readonly T[]
+  onSelect: (item: T) => void
   /** Announced as the list's name. */
   label: Text
   searchLabel: Text
@@ -25,6 +25,25 @@ export interface SelectionListOptions {
   sourceWording?: string
   /** Traits to exclude before the first render, as `initialExclusions` does. */
   initialExclusions?: ReadonlyMap<string, readonly string[]>
+  /**
+   * What one result looks like. Defaults to its name on a row.
+   *
+   * The filtering above it is the ported, verified part and does not care what
+   * a result is drawn as — so a gallery of cover art and a list of names are
+   * the same screen with a different renderer, rather than two screens whose
+   * filtering has to be kept in step.
+   */
+  renderItem?: (item: T) => HTMLElement
+  /** Extra classes for the results container, so a caller can lay it out. */
+  listClass?: string | readonly string[]
+  /**
+   * How the result count reads. Defaults to the bare number.
+   *
+   * It is an `aria-live` region, so it is also what a screen reader announces
+   * when a filter changes — and "9" on its own says neither what there are
+   * nine of nor that anything happened.
+   */
+  countLabel?: (count: number) => string
 }
 
 export interface SelectionList {
@@ -67,7 +86,9 @@ function traitControl(group: TraitGroup, trait: string, onChange: () => void): H
   })
 }
 
-export function selectionList(options: SelectionListOptions): SelectionList {
+export function selectionList<T extends SelectionItem = SelectionItem>(
+  options: SelectionListOptions<T>,
+): SelectionList {
   const groups = groupsFrom(options.items, options.sourceWording ?? 'Source')
 
   const exclusions: ReadonlyMap<string, readonly string[]> =
@@ -82,8 +103,10 @@ export function selectionList(options: SelectionListOptions): SelectionList {
   const filters = el('div', { class: 'vk-filters', attrs: { role: 'group' } })
   const results = el('div', { class: 'vk-results' })
 
-  const visibleItems = (): SelectionItem[] =>
-    sortItems(filterItems(options.items, groups, { search }))
+  // `filterItems` and `sortItems` select and reorder; they never copy. So the
+  // objects that come back are the caller's own, and a renderer written for
+  // the richer type is handed the richer type.
+  const visibleItems = (): T[] => sortItems(filterItems(options.items, groups, { search })) as T[]
 
   const renderFilters = (): void => {
     clear(filters)
@@ -113,18 +136,19 @@ export function selectionList(options: SelectionListOptions): SelectionList {
     const items = visibleItems()
     clear(results)
     results.append(
-      list<SelectionItem>({
+      list<T>({
         items,
         label: options.label,
         emptyMessage: options.emptyMessage,
         onSelect: (item) => options.onSelect(item),
-        render: (item) => label(rawText(item.display)),
+        render: options.renderItem ?? ((item) => label(rawText(item.display))),
+        ...(options.listClass === undefined ? {} : { class: options.listClass }),
       }),
       // Announced politely, so a filter change reports its own result.
       el('p', {
         class: 'vk-results__count',
         attrs: { 'aria-live': 'polite' },
-        text: `${items.length}`,
+        text: options.countLabel?.(items.length) ?? `${items.length}`,
       }),
     )
   }

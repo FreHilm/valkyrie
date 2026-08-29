@@ -123,6 +123,8 @@ export function browsableQuests(
   traits: Map<string, string[]>
   description: string
   status?: string
+  image?: string
+  detail?: string
 }[] {
   return entries.map((entry) => ({
     key: entry.id,
@@ -134,10 +136,57 @@ export function browsableQuests(
       ['Rating', [ratingBand(entry.rating)]],
     ]),
     description: best(entry.quest.languagesSynopsys, language, entry.quest.defaultLanguage) ?? '',
+    detail: browseDetail(entry),
+    // The cover is fetched from the store as the card scrolls into view, which
+    // is why the image element is lazy: 169 covers eagerly would be a lot of
+    // requests for a list a player scrolls a screenful of.
+    ...(entry.image.endsWith('/') ? {} : { image: entry.image }),
     // Omitted rather than set to undefined: exactOptionalPropertyTypes
     // distinguishes "absent" from "present and undefined".
     ...(installed.has(entry.id) ? { status: 'Downloaded' } : {}),
   }))
+}
+
+/**
+ * The facts a player picks a scenario by, on one line.
+ *
+ * The same ones the Unity quest list puts under a title: how long it runs, how
+ * many investigators it seats, and how hard it is or what it scored. Shared
+ * with the local library so a scenario reads the same before and after it is
+ * downloaded.
+ */
+export function questDetailLine(quest: {
+  lengthMin: number
+  lengthMax: number
+  minHero: number
+  maxHero: number
+}): string[] {
+  const parts: string[] = []
+  if (quest.lengthMax > 0) {
+    parts.push(
+      quest.lengthMin === quest.lengthMax
+        ? `${String(quest.lengthMax)} min`
+        : `${String(quest.lengthMin)}–${String(quest.lengthMax)} min`,
+    )
+  }
+  parts.push(
+    quest.minHero === quest.maxHero
+      ? `${String(quest.maxHero)} ${plural(quest.maxHero, 'investigator')}`
+      : `${String(quest.minHero)}–${String(quest.maxHero)} investigators`,
+  )
+  return parts
+}
+
+/** A scenario for one investigator seats an investigator, not investigators. */
+function plural(count: number, noun: string): string {
+  return count === 1 ? noun : `${noun}s`
+}
+
+/** Length, seats and rating: what the online list shows under a title. */
+function browseDetail(entry: IndexedQuest): string {
+  const parts = questDetailLine(entry.quest)
+  if (entry.rating !== null) parts.push(`${entry.rating.toFixed(1)}/10`)
+  return parts.join(' · ')
 }
 
 /**
@@ -167,14 +216,14 @@ function best(
 }
 
 /** The game shows difficulty as a word, not a number between 0 and 1. */
-function difficultyBand(difficulty: number): string {
+export function difficultyBand(difficulty: number): string {
   if (difficulty <= 0.25) return 'Easy'
   if (difficulty <= 0.5) return 'Normal'
   if (difficulty <= 0.75) return 'Hard'
   return 'Brutal'
 }
 
-function lengthBand(min: number, max: number): string {
+export function lengthBand(min: number, max: number): string {
   const average = (min + max) / 2
   if (average <= 0) return 'Unknown'
   if (average <= 60) return 'Short'
